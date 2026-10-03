@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import AppConfig, ConfigError, config_to_dict, parse_config
+from .frozen import app_dir, dock_exe, is_frozen
 
 PACKAGE_ROOT = str(Path(__file__).resolve().parent.parent)
 ERROR_CANCELLED = 1223
@@ -35,7 +36,10 @@ def decode_config(text: str) -> AppConfig:
     return parse_config(raw, "configuración recibida")
 
 
-def save_config_command(config: AppConfig, executable: str = sys.executable) -> tuple[str, str, str]:
+def save_config_command(config: AppConfig, executable: str = sys.executable,
+                        frozen: bool | None = None) -> tuple[str, str, str]:
+    if is_frozen() if frozen is None else frozen:
+        return str(dock_exe(executable)), f"save-config {encode_config(config)}", str(app_dir(executable))
     pythonw = Path(executable).with_name("pythonw.exe")
     exe = str(pythonw) if pythonw.exists() else executable
     return exe, f"-m ipswitch save-config {encode_config(config)}", PACKAGE_ROOT

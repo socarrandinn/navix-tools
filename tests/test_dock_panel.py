@@ -637,3 +637,19 @@ def test_menu_has_icons_and_hover_style(qtbot):
     assert "border-radius" in style
 
 
+
+
+def test_app_icons_scale_up_on_hover(qtbot):
+    from dock.panel import APP_ICON, APP_ICON_HOVER, AppIconButton
+
+    class SvgTool(CountingTool):
+        icon = "network"
+
+    panel, _ = make_panel(qtbot, [LoadedTool("red", SvgTool(), None)])
+    button = panel.tool_buttons["red"]
+    assert isinstance(button, AppIconButton)
+    assert button.iconSize().width() == APP_ICON
+    button.enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
+    qtbot.waitUntil(lambda: button.iconSize().width() == APP_ICON_HOVER, timeout=1000)
+    button.leaveEvent(QEvent(QEvent.Type.Leave))
+    qtbot.waitUntil(lambda: button.iconSize().width() == APP_ICON, timeout=1000)

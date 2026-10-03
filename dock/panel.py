@@ -64,6 +64,7 @@ QT_MAX = 16777215
 EXPANDED_RADIUS = R_SURFACE
 HEADER_BUTTON = 28  # pin y cerrar: botones de ícono redondos
 APP_ICON = 15       # tamaño del dibujo dentro de cada botón de la barra
+APP_ICON_HOVER = 19  # al pasar el mouse el ícono crece
 DOT_STEP, DOT_RADIUS = 5.0, 1.4
 WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
 HOVER_JIGGLE = 0.4
@@ -139,6 +140,33 @@ class Grip(QWidget):
         for column in range(columns):
             for row in range(rows):
                 painter.drawEllipse(QPointF(left + column * DOT_STEP, top + row * DOT_STEP), DOT_RADIUS, DOT_RADIUS)
+
+
+class AppIconButton(QToolButton):
+    """Botón de ícono de la barra: al pasar el mouse el dibujo crece suavemente."""
+
+    def __init__(self):
+        super().__init__()
+        self._scale = QVariantAnimation(self)
+        self._scale.setDuration(120)
+        self._scale.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._scale.valueChanged.connect(lambda value: self.setIconSize(QSize(round(value), round(value))))
+
+    def _animate_to(self, size: int) -> None:
+        self._scale.stop()
+        self._scale.setStartValue(float(self.iconSize().width()))
+        self._scale.setEndValue(float(size))
+        self._scale.start()
+
+    def enterEvent(self, event) -> None:
+        if not self.icon().isNull():
+            self._animate_to(APP_ICON_HOVER)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        if not self.icon().isNull():
+            self._animate_to(APP_ICON)
+        super().leaveEvent(event)
 
 
 class Card(QFrame):
@@ -218,11 +246,11 @@ class Panel(QWidget):
         for item in loaded:
             self._add_tool(item)
         self.icons_box.layout().addStretch(1)
-        self.settings_button = QToolButton()
+        self.settings_button = AppIconButton()
         self.settings_button.setObjectName("appIcon")
         self.settings_button.setToolTip("Menú")
         self.settings_button.setFixedSize(ICON, ICON)
-        gear = svg_icon("settings", color="#c9d1d9", size=APP_ICON)
+        gear = svg_icon("settings", color="#c9d1d9", size=APP_ICON_HOVER)
         if gear is not None:
             self.settings_button.setIcon(gear)
             self.settings_button.setIconSize(QSize(APP_ICON, APP_ICON))
@@ -335,9 +363,9 @@ class Panel(QWidget):
         self.cards[item.name] = card
         self._titles[item.name] = title
         self.stack.addWidget(card)
-        button = QToolButton()
+        button = AppIconButton()
         button.setObjectName("appIcon")
-        svg = svg_icon(icon, size=APP_ICON)
+        svg = svg_icon(icon, size=APP_ICON_HOVER)
         if svg is not None:
             button.setIcon(svg)
             button.setIconSize(QSize(APP_ICON, APP_ICON))

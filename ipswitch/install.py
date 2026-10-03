@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from .config import default_config_path, ensure_config
+from .frozen import app_dir, dock_exe, is_frozen
 from .helper import TASK_NAME
 from .paths import FOLDERID_PROGRAM_FILES, known_folder
 from .shell import Runner
@@ -68,6 +69,11 @@ def deploy_runtime(base_prefix: Path, package_dir: Path, target: Path) -> None:
 
 def helper_action(target: Path) -> tuple[str, str, str]:
     return str(target / "python" / "pythonw.exe"), "-I -m ipswitch helper", str(target / "app")
+
+
+def helper_action_frozen(executable: str | Path) -> tuple[str, str, str]:
+    """App instalada: la tarea corre IPDock.exe de Program Files (solo-admin), sin copiar Python."""
+    return str(dock_exe(executable)), "helper", str(app_dir(executable))
 
 
 def _secure_dir(variable: str) -> list[str]:
@@ -136,9 +142,13 @@ def install(
     base_prefix: Path | None = None,
     package_dir: Path = PACKAGE_DIR,
     runner: Runner = utf8_runner,
+    frozen: bool | None = None,
+    executable: str | None = None,
 ) -> list[str]:
     config_path = config_path or default_config_path()
-    target = target or install_dir()
+    frozen = is_frozen() if frozen is None else frozen
+    executable = executable or sys.executable
+    target = target or (app_dir(executable) if frozen else install_dir())
     base_prefix = base_prefix or Path(sys.base_prefix)
     _run(runner, prepare_script(str(config_path.parent), str(target)), "la preparación de carpetas")
     warnings = []
@@ -150,8 +160,12 @@ def install(
         )
     ensure_config(config_path)
     (config_path.parent / "results").mkdir(exist_ok=True)
-    deploy_runtime(base_prefix, package_dir, target)
-    _run(runner, register_script(*helper_action(target)), "el registro de la tarea")
+    if frozen:
+        action = helper_action_frozen(executable)
+    else:
+        deploy_runtime(base_prefix, package_dir, target)
+        action = helper_action(target)
+    _run(runner, register_script(*action), "el registro de la tarea")
     return warnings
 
 

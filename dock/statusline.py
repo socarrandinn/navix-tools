@@ -45,8 +45,16 @@ def recorder_command(executable: str, script: str) -> str:
     return f'"{executable}" "{script}"'
 
 
+def recorder_command_for(frozen: bool, executable: str) -> str:
+    if frozen:
+        from ipswitch.frozen import cli_exe
+
+        return f'"{cli_exe(executable)}" statusline'
+    return recorder_command(executable, str(ROOT / "ipdock_statusline.py"))
+
+
 def default_recorder_command() -> str:
-    return recorder_command(sys.executable, str(ROOT / "ipdock_statusline.py"))
+    return recorder_command_for(bool(getattr(sys, "frozen", False)), sys.executable)
 
 
 def is_installed(settings: Path, command: str) -> bool:
