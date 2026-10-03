@@ -13,6 +13,7 @@ from .helper import (
     request_to_json,
     result_from_json,
     result_path,
+    results_dir,
     runtime_dir,
     write_atomic,
 )
@@ -28,6 +29,7 @@ def request_switch(
     profile: str | None = None,
     *,
     runtime: Path | None = None,
+    results: Path | None = None,
     runner: Runner = run_command,
     timeout: float = 20.0,
     poll: float = 0.2,
@@ -37,6 +39,7 @@ def request_switch(
     if action not in ACTIONS:
         raise ValueError(f"Acción desconocida: {action}")
     runtime = runtime or runtime_dir()
+    results = results or results_dir()
     request = Request(uuid.uuid4().hex, action, profile)
     pending = request_path(runtime, request.id)
     write_atomic(pending, request_to_json(request))
@@ -47,7 +50,7 @@ def request_switch(
             "No se pudo iniciar el helper. ¿Está instalado? En una terminal de administrador ejecuta:\n"
             f"python -m ipswitch install\n\n{started.output}"
         )
-    target = result_path(runtime, request.id)
+    target = result_path(results, request.id)
     deadline = clock() + timeout
     while True:
         try:
@@ -55,9 +58,12 @@ def request_switch(
         except (OSError, ValueError):
             result = None
         if result is not None:
-            target.unlink(missing_ok=True)
+            # La carpeta de resultados es solo-admin: el helper limpia los viejos.
             return result
         if clock() >= deadline:
             pending.unlink(missing_ok=True)
-            raise HelperError(f"El helper no respondió a tiempo ({timeout:.0f} s)")
+            raise HelperError(
+                f"El helper no respondió a tiempo ({timeout:.0f} s). Si moviste o actualizaste el programa, "
+                "en una terminal de administrador ejecuta de nuevo: python -m ipswitch install"
+            )
         sleep(poll)

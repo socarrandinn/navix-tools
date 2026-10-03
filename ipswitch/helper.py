@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import json
 import os
+import stat
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from .actions import Reader, switch_to_dhcp, switch_to_profile
-from .config import AppConfig, ConfigError, load_config
+from .config import AppConfig, ConfigError, default_config_path, load_config
 from .models import ProfileError
 from .netsh import NetshError
+from .paths import FOLDERID_LOCAL_APP_DATA, known_folder
 from .shell import Runner, run_command
 from .status import read_status
 
 TASK_NAME = "IPSwitchHelper"
 ACTIONS = {"dhcp", "profile"}
+RESULT_MAX_AGE_S = 600
 
 
 @dataclass(frozen=True)
@@ -63,16 +67,21 @@ def result_from_json(text: str) -> Result:
 
 
 def runtime_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
-    return Path(base) / "ipswitch"
+    """Carpeta del usuario donde el cliente deja solicitudes (escribible sin admin)."""
+    return known_folder(FOLDERID_LOCAL_APP_DATA) / "ipswitch"
+
+
+def results_dir() -> Path:
+    """Carpeta solo-admin donde el helper escribe resultados (los usuarios solo leen)."""
+    return default_config_path().parent / "results"
 
 
 def request_path(runtime: Path, request_id: str) -> Path:
     return runtime / f"request-{request_id}.json"
 
 
-def result_path(runtime: Path, request_id: str) -> Path:
-    return runtime / f"result-{request_id}.json"
+def result_path(results: Path, request_id: str) -> Path:
+    return results / f"result-{request_id}.json"
 
 
 def write_atomic(path: Path, text: str) -> None:
@@ -80,6 +89,13 @@ def write_atomic(path: Path, text: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
+
+
+def is_reparse_point(path: Path) -> bool:
+    try:
+        return bool(os.lstat(path).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except OSError:
+        return False
 
 
 def handle_request(
@@ -96,6 +112,8 @@ def handle_request(
         return Result(request.id, True, f"Perfil {profile.name} aplicado")
     except (NetshError, ProfileError) as exc:
         return Result(request.id, False, str(exc))
+    except Exception as exc:  # noqa: BLE001 - un fallo no debe frenar las demás solicitudes
+        return Result(request.id, False, f"Error inesperado: {type(exc).__name__}: {exc}")
 
 
 def _mtime(path: Path) -> float:
@@ -105,10 +123,32 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
+def _sweep_results(results: Path, now: float) -> None:
+    for path in results.glob("result-*.json"):
+        if now - _mtime(path) > RESULT_MAX_AGE_S:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
 def run_helper(
-    runtime: Path, config_path: Path, runner: Runner = run_command, reader: Reader = read_status
+    requests: Path,
+    results: Path,
+    config_path: Path,
+    runner: Runner = run_command,
+    reader: Reader = read_status,
+    now=time.time,
 ) -> list[Result]:
-    pending = sorted(runtime.glob("request-*.json"), key=_mtime)
+    # requests es escribible por el usuario: nunca seguir junctions/symlinks como admin.
+    if is_reparse_point(requests) or not requests.is_dir():
+        return []
+    results.mkdir(parents=True, exist_ok=True)
+    _sweep_results(results, now())
+    pending = sorted(
+        (p for p in requests.glob("request-*.json") if not is_reparse_point(p) and p.is_file()),
+        key=_mtime,
+    )
     if not pending:
         return []
     config: AppConfig | None
@@ -118,7 +158,7 @@ def run_helper(
     except ConfigError as exc:
         config = None
         config_error = str(exc)
-    results = []
+    out = []
     for path in pending:
         request_id = path.stem.removeprefix("request-")
         try:
@@ -132,10 +172,10 @@ def run_helper(
                 result = Result(request_id, False, config_error)
             else:
                 result = handle_request(request, config, runner=runner, reader=reader)
-        write_atomic(result_path(runtime, request_id), result_to_json(result))
+        write_atomic(result_path(results, request_id), result_to_json(result))
         try:
             path.unlink()
         except OSError:
             pass
-        results.append(result)
-    return results
+        out.append(result)
+    return out

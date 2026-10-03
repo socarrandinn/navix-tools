@@ -53,9 +53,10 @@ def test_install_requires_admin(monkeypatch, capsys):
 def test_install_as_admin(monkeypatch, capsys):
     called = []
     monkeypatch.setattr(cli, "is_admin", lambda: True)
-    monkeypatch.setattr(cli, "install", lambda: called.append(True))
+    monkeypatch.setattr(cli, "install", lambda: called.append(True) or ["aviso: config.json.untrusted"])
     assert cli.main(["install"]) == 0
     assert called == [True]
+    assert "config.json.untrusted" in capsys.readouterr().out
 
 
 def test_status_config_error_returns_1(monkeypatch, capsys):
@@ -68,7 +69,7 @@ def test_status_config_error_returns_1(monkeypatch, capsys):
 
 
 def test_helper_command_runs_helper(monkeypatch):
-    monkeypatch.setattr(cli, "run_helper", lambda runtime, config_path: [Result("a", True, "ok")])
+    monkeypatch.setattr(cli, "run_helper", lambda requests, results, config_path: [Result("a", True, "ok")])
     assert cli.main(["helper"]) == 0
-    monkeypatch.setattr(cli, "run_helper", lambda runtime, config_path: [Result("a", False, "mal")])
+    monkeypatch.setattr(cli, "run_helper", lambda requests, results, config_path: [Result("a", False, "mal")])
     assert cli.main(["helper"]) == 1

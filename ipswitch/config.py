@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from .models import ProfileError, StaticProfile
+from .paths import FOLDERID_PROGRAM_DATA, known_folder
 
 
 class ConfigError(Exception):
@@ -27,8 +27,7 @@ DEFAULT_CONFIG = AppConfig(
 
 
 def default_config_path() -> Path:
-    base = os.environ.get("ProgramData") or r"C:\ProgramData"
-    return Path(base) / "ipswitch" / "config.json"
+    return known_folder(FOLDERID_PROGRAM_DATA) / "ipswitch" / "config.json"
 
 
 def save_config(path: Path, config: AppConfig) -> None:

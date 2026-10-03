@@ -92,6 +92,8 @@ def test_invalid_config_raises(tmp_path, data, fragment):
         load_config(path)
 
 
-def test_default_config_path_uses_programdata(monkeypatch, tmp_path):
-    monkeypatch.setenv("ProgramData", str(tmp_path))
-    assert default_config_path() == tmp_path / "ipswitch" / "config.json"
+def test_default_config_path_is_under_program_data():
+    path = default_config_path()
+    assert path.name == "config.json"
+    assert path.parent.name == "ipswitch"
+    assert path.parent.parent.name.lower() == "programdata"

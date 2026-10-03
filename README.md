@@ -9,8 +9,12 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python -m ipswitch install
 ```
 
-Crea `C:\ProgramData\ipswitch\config.json` (solo administradores pueden editarlo) y la tarea
-programada `IPSwitchHelper`, que aplica los cambios con privilegios.
+Crea `C:\ProgramData\ipswitch\config.json` (solo administradores pueden editarlo), copia el
+helper y un Python aislado a `C:\Program Files\ipswitch` y registra la tarea programada
+`IPSwitchHelper`, que aplica los cambios con privilegios. La tarea solo ejecuta esa copia, que un
+usuario sin admin no puede modificar.
+
+Después de actualizar el código, ejecutá `install` de nuevo para refrescar la copia.
 
 ## Uso (terminal normal)
 

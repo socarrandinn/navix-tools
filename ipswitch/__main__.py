@@ -6,7 +6,7 @@ import sys
 from .actions import active_label
 from .client import HelperError, request_switch
 from .config import ConfigError, default_config_path, load_config
-from .helper import run_helper, runtime_dir
+from .helper import results_dir, run_helper, runtime_dir
 from .install import InstallError, install, is_admin, uninstall
 from .status import StatusError, describe, read_status
 
@@ -42,13 +42,14 @@ def main(argv: list[str] | None = None) -> int:
                 print("Requiere una terminal abierta como administrador.", file=sys.stderr)
                 return 1
             if args.command == "install":
-                install()
+                for warning in install():
+                    print(f"AVISO: {warning}")
                 print(f"Instalado. Perfiles en {default_config_path()}")
             else:
                 uninstall()
                 print("Tarea eliminada.")
             return 0
-        results = run_helper(runtime_dir(), default_config_path())
+        results = run_helper(runtime_dir(), results_dir(), default_config_path())
         return 0 if all(r.ok for r in results) else 1
     except (ConfigError, StatusError, HelperError, InstallError) as exc:
         print(exc, file=sys.stderr)
