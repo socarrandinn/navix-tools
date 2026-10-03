@@ -189,7 +189,7 @@ class NetworkPage(QWidget):
         layout.addWidget(self.table, 1)
         tools = QHBoxLayout()
         self.add_button = _button("Agregar", "plus")
-        self.add_button.clicked.connect(self.add_row)
+        self.add_button.clicked.connect(lambda: self.add_row())
         self.remove_button = _button("Quitar", "trash-2")
         self.remove_button.clicked.connect(self.remove_selected)
         tools.addWidget(self.add_button)
@@ -247,16 +247,17 @@ class NetworkPage(QWidget):
             item = self.table.item(row, column)
             return item.text().strip() if item else ""
 
-        profiles = [
-            {
-                "name": cell(row, 0),
-                "ip": cell(row, 1),
-                "prefix": cell(row, 2),
-                "gateway": cell(row, 3),
-                "dns": [d.strip() for d in cell(row, 4).split(",") if d.strip()],
-            }
-            for row in range(self.table.rowCount())
-        ]
+        profiles = []
+        for row in range(self.table.rowCount()):
+            values = [cell(row, column) for column in range(len(COLUMNS))]
+            if not any(values):
+                continue  # fila vacía (por ejemplo, recién agregada): se ignora
+            name, ip, prefix, gateway, dns = values
+            if not (name and ip and prefix and gateway):
+                label = name or f"fila {row + 1}"
+                raise ConfigError(f"Perfil {label}: completá nombre, IP, prefijo y gateway.")
+            profiles.append({"name": name, "ip": ip, "prefix": prefix, "gateway": gateway,
+                             "dns": [d.strip() for d in dns.split(",") if d.strip()]})
         return parse_config({"adapter": self.adapter.currentText().strip(), "profiles": profiles}, "perfiles")
 
     def save(self) -> None:

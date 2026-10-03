@@ -449,6 +449,9 @@ class Panel(QWidget):
         """Aplica cambios de Configuración en vivo (borde, ancho, fijado, efecto líquido)."""
         self.config = config
         self.pin_button.setChecked(config.pinned)
+        if not config.liquid:
+            self.wobble_anim.stop()
+            self.wobble, self._phase = 0.0, 0.0
         self._arrange()
         self.animation.stop()
         self.setGeometry(QRect(*self._target(self.revealed)))

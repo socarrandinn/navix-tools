@@ -51,6 +51,13 @@ class _ShellExecuteInfo(ctypes.Structure):
     ]
 
 
+def shell_execute_failure(error: int) -> int:
+    """-1 si el usuario canceló el UAC; cualquier otro error se informa."""
+    if error == ERROR_CANCELLED:
+        return -1
+    raise ConfigError(f"No se pudo pedir permisos de administrador (error {error})")
+
+
 def run_elevated(executable: str, params: str, cwd: str) -> int:
     """Ejecuta con UAC y espera. Devuelve el código de salida, o -1 si el usuario canceló."""
     SEE_MASK_NOCLOSEPROCESS = 0x40
@@ -59,10 +66,9 @@ def run_elevated(executable: str, params: str, cwd: str) -> int:
     info.fMask = SEE_MASK_NOCLOSEPROCESS
     info.lpVerb, info.lpFile, info.lpParameters, info.lpDirectory = "runas", executable, params, cwd
     info.nShow = 0
-    if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
-        if ctypes.GetLastError() == ERROR_CANCELLED:
-            return -1
-        raise ConfigError(f"No se pudo pedir permisos de administrador ({ctypes.GetLastError()})")
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    if not shell32.ShellExecuteExW(ctypes.byref(info)):
+        return shell_execute_failure(ctypes.get_last_error())
     kernel32 = ctypes.windll.kernel32
     kernel32.WaitForSingleObject(info.hProcess, 0xFFFFFFFF)
     code = wintypes.DWORD()

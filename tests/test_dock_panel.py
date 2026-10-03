@@ -389,3 +389,19 @@ def test_liquid_off_disables_wobble(qtbot):
     panel.open_tool("contador")
     qtbot.wait(50)
     assert panel.wobble == 0.0
+
+
+def test_turning_liquid_off_stops_the_wave(qtbot):
+    from dataclasses import replace
+
+    panel, _ = make_panel(qtbot)
+    panel.animation_ms = 60
+    panel.wobble_ms = 2000
+    panel.show()
+    qtbot.waitExposed(panel)
+    panel.open_tool("contador")
+    qtbot.waitUntil(lambda: panel.wobble > 0.5, timeout=1000)
+    panel.apply_config(replace(panel.config, liquid=False))
+    assert panel.wobble == 0.0
+    qtbot.wait(50)
+    assert panel.wobble == 0.0

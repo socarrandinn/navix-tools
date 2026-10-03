@@ -77,3 +77,11 @@ def test_cli_save_config_rejects_invalid(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "default_config_path", lambda: target)
     assert cli.main(["save-config", "basura"]) == 1
     assert not target.exists()
+
+
+def test_shell_execute_error_mapping():
+    from ipswitch.elevate import ERROR_CANCELLED, shell_execute_failure
+
+    assert shell_execute_failure(ERROR_CANCELLED) == -1
+    with pytest.raises(ConfigError, match="5"):
+        shell_execute_failure(5)

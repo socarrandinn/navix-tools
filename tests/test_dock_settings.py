@@ -145,3 +145,21 @@ def test_network_page_without_install_explains_and_disables_save(qtbot):
     page = h.window.network
     assert "install" in page.message.text()
     assert not page.save_button.isEnabled()
+
+
+def test_empty_rows_are_ignored(qtbot):
+    h = Harness(qtbot)
+    page = h.window.network
+    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert [p.name for p in h.ip_saved[-1].profiles] == ["Casa"]
+
+
+def test_partial_row_names_the_profile(qtbot):
+    h = Harness(qtbot)
+    page = h.window.network
+    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
+    page.table.item(1, 0).setText("Oficina")
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.ip_saved == []
+    assert "Oficina" in page.message.text()
