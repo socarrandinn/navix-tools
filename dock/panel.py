@@ -166,6 +166,7 @@ class Panel(QWidget):
         fit_content: bool = True,
         on_config_change: Callable[[DockConfig], None] = lambda config: None,
         on_close: Callable[[], None] | None = None,
+        on_settings: Callable[[], None] = lambda: None,
     ):
         super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
                          | Qt.WindowType.WindowStaysOnTopHint)
@@ -179,6 +180,7 @@ class Panel(QWidget):
         self.fit_content = fit_content
         self.on_config_change = on_config_change
         self.on_close = on_close or QApplication.quit
+        self.on_settings = on_settings
         self.revealed = False
         self.wobble = 0.0
         self._phase = 0.0
@@ -199,6 +201,18 @@ class Panel(QWidget):
         for item in loaded:
             self._add_tool(item)
         self.bar.layout().addStretch(1)
+        self.settings_button = QToolButton()
+        self.settings_button.setObjectName("appIcon")
+        self.settings_button.setToolTip("Configuración")
+        self.settings_button.setFixedSize(22, 22)
+        gear = svg_icon("settings", color="#aab4c0", size=15)
+        if gear is not None:
+            self.settings_button.setIcon(gear)
+            self.settings_button.setIconSize(QSize(15, 15))
+        else:
+            self.settings_button.setText("⚙")
+        self.settings_button.clicked.connect(lambda: self.on_settings())
+        self.bar.layout().addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         root = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
         root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
@@ -431,9 +445,19 @@ class Panel(QWidget):
         self._update_shape()
         self.update()
 
+    def apply_config(self, config: DockConfig) -> None:
+        """Aplica cambios de Configuración en vivo (borde, ancho, fijado, efecto líquido)."""
+        self.config = config
+        self.pin_button.setChecked(config.pinned)
+        self._arrange()
+        self.animation.stop()
+        self.setGeometry(QRect(*self._target(self.revealed)))
+        self._update_shape()
+        self.update()
+
     def jiggle(self, strength: float = 1.0) -> None:
         """Onda líquida que se amortigua: la gota tiembla y vuelve a su forma."""
-        if not self.isVisible() or self.wobble_ms <= 0:
+        if not self.config.liquid or not self.isVisible() or self.wobble_ms <= 0:
             return
         self.wobble_anim.stop()
         self.wobble_anim.setDuration(self.wobble_ms)
@@ -498,6 +522,8 @@ class Panel(QWidget):
 
     def build_menu(self) -> QMenu:
         menu = QMenu(self)
+        settings = menu.addAction("Configuración")
+        settings.triggered.connect(lambda: self.on_settings())
         pin = menu.addAction("Soltar panel" if self.config.pinned else "Fijar panel")
         pin.triggered.connect(self.toggle_pin)
         menu.addSeparator()

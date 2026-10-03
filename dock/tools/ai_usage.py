@@ -6,6 +6,7 @@ from typing import Callable
 
 from PySide6.QtWidgets import QGridLayout, QLabel, QProgressBar, QVBoxLayout, QWidget
 
+from ..config import AI_SOURCES, DockConfigError, dock_dir, load_dock_config
 from ..statusline import usage_path
 from ..tool import Tool
 from ..usage import UsageSnapshot, age_text, read_claude, read_codex, reset_text
@@ -33,11 +34,13 @@ class AiUsageTool(Tool):
         read_codex: Callable[[], UsageSnapshot | None] | None = None,
         now: Callable[[], datetime] = _now,
         run: RunAsync = run_async,
+        sources: Callable[[], tuple[str, ...]] | None = None,
     ):
         self._now = now
         self._read_claude = read_claude or (lambda: read_claude_default(self._now()))
         self._read_codex = read_codex or (lambda: read_codex_default(self._now()))
         self._run = run
+        self._sources = sources or enabled_sources
         self.loading = False
         self.headers: dict[str, QLabel] = {}
         self.ages: dict[str, QLabel] = {}
@@ -77,20 +80,26 @@ class AiUsageTool(Tool):
         self.loading = False
         self.message.setText("")
         now = self._now()
+        enabled = {s.lower() for s in self._sources()}
         for source, snapshot in zip(SOURCES, snapshots):
-            self._fill(source, snapshot, now)
+            shown = source.lower() in enabled
+            for widget in (self.headers[source], self.ages[source]):
+                widget.setVisible(shown)
+            self._fill(source, snapshot if shown else None, now, shown)
 
     def _show_error(self, exc: Exception) -> None:
         self.loading = False
         self.message.setText(f"No se pudo leer el uso: {exc}")
 
-    def _fill(self, source: str, snapshot: UsageSnapshot | None, now: datetime) -> None:
+    def _fill(self, source: str, snapshot: UsageSnapshot | None, now: datetime, shown: bool = True) -> None:
         grid = self._grids[source]
         for label, bar in self.rows[source]:
             for widget in (label, bar):
                 grid.removeWidget(widget)
                 widget.deleteLater()
         self.rows[source] = []
+        if not shown:
+            return
         if snapshot is None:
             self.headers[source].setText(source)
             self.ages[source].setText(HINTS[source])
@@ -111,6 +120,13 @@ class AiUsageTool(Tool):
             grid.addWidget(label, index, 0)
             grid.addWidget(bar, index, 1)
             self.rows[source].append((label, bar))
+
+
+def enabled_sources() -> tuple[str, ...]:
+    try:
+        return load_dock_config(dock_dir() / "dock.json").ai_sources
+    except DockConfigError:
+        return AI_SOURCES
 
 
 def read_claude_default(now: datetime) -> UsageSnapshot | None:

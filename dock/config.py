@@ -8,6 +8,7 @@ from pathlib import Path
 
 TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 EDGES = {"left", "right", "top"}
+AI_SOURCES = ("claude", "codex")
 
 
 class DockConfigError(Exception):
@@ -21,6 +22,8 @@ class DockConfig:
     tools: tuple[str, ...] = ("ip_switch", "ai_usage")
     pinned: bool = False
     position: float = 0.5
+    ai_sources: tuple[str, ...] = AI_SOURCES
+    liquid: bool = True
 
 
 def dock_dir() -> Path:
@@ -31,6 +34,7 @@ def dock_dir() -> Path:
 def save_dock_config(path: Path, config: DockConfig) -> None:
     data = asdict(config)
     data["tools"] = list(config.tools)
+    data["ai_sources"] = list(config.ai_sources)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -65,5 +69,11 @@ def load_dock_config(path: Path) -> DockConfig:
     position = raw.get("position", default.position)
     if isinstance(position, bool) or not isinstance(position, (int, float)) or not 0 <= position <= 1:
         raise DockConfigError(f"{path}: position debe ser un número entre 0 y 1")
-    return DockConfig(edge=edge, width=width, tools=tuple(tools),
-                      pinned=pinned, position=float(position))
+    ai_sources = raw.get("ai_sources", list(default.ai_sources))
+    if not isinstance(ai_sources, list) or any(s not in AI_SOURCES for s in ai_sources):
+        raise DockConfigError(f"{path}: ai_sources debe ser una lista con claude y/o codex")
+    liquid = raw.get("liquid", default.liquid)
+    if not isinstance(liquid, bool):
+        raise DockConfigError(f"{path}: liquid debe ser true o false")
+    return DockConfig(edge=edge, width=width, tools=tuple(tools), pinned=pinned,
+                      position=float(position), ai_sources=tuple(ai_sources), liquid=liquid)

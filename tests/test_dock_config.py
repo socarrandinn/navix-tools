@@ -79,3 +79,23 @@ def test_old_backdrop_key_is_ignored(tmp_path):
     path = tmp_path / "dock.json"
     path.write_text('{"backdrop": "acrylic"}', encoding="utf-8")
     assert load_dock_config(path) == DockConfig()
+
+
+def test_ai_sources_and_liquid_defaults_and_roundtrip(tmp_path):
+    assert DockConfig().ai_sources == ("claude", "codex")
+    assert DockConfig().liquid is True
+    path = tmp_path / "dock.json"
+    save_dock_config(path, DockConfig(ai_sources=("codex",), liquid=False))
+    assert load_dock_config(path) == DockConfig(ai_sources=("codex",), liquid=False)
+
+
+@pytest.mark.parametrize("data, fragment", [
+    ({"ai_sources": ["gemini"]}, "ai_sources"),
+    ({"ai_sources": "claude"}, "ai_sources"),
+    ({"liquid": "si"}, "liquid"),
+])
+def test_invalid_ai_sources_or_liquid(tmp_path, data, fragment):
+    path = tmp_path / "dock.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(DockConfigError, match=fragment):
+        load_dock_config(path)

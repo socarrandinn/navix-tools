@@ -210,12 +210,6 @@ def test_close_button_calls_on_close(qtbot):
     assert state["closed"] == 1
 
 
-def test_context_menu_has_pin_and_close(qtbot):
-    panel, _ = make_panel(qtbot)
-    texts = [action.text() for action in panel.build_menu().actions() if action.text()]
-    assert texts == ["Fijar panel", "Salir"]
-
-
 def test_reposition_follows_area_change(qtbot):
     panel, state = make_panel(qtbot)
     panel.open_tool("contador")
@@ -366,3 +360,32 @@ def test_svg_icon_names_render_as_icons(qtbot):
     assert not button.icon().isNull()
     assert not panel.pin_button.icon().isNull()
     assert not panel.close_button.icon().isNull()
+
+
+def test_settings_button_and_menu_open_settings(qtbot):
+    opened = []
+    panel, _ = make_panel(qtbot, on_settings=lambda: opened.append(1))
+    panel.settings_button.click()
+    texts = [action.text() for action in panel.build_menu().actions() if action.text()]
+    assert texts == ["Configuración", "Fijar panel", "Salir"]
+    assert opened == [1]
+    assert not panel.settings_button.icon().isNull()
+
+
+def test_apply_config_moves_and_resizes_live(qtbot):
+    from dataclasses import replace
+
+    panel, _ = make_panel(qtbot)
+    panel.apply_config(replace(panel.config, edge="top", width=360))
+    assert rect(panel) == bar_rect(AREA, "top", 0.5, panel.bar_len)
+    panel.open_tool("contador")
+    assert rect(panel)[2] == 360
+
+
+def test_liquid_off_disables_wobble(qtbot):
+    panel, _ = make_panel(qtbot, config=DockConfig(liquid=False))
+    panel.show()
+    qtbot.waitExposed(panel)
+    panel.open_tool("contador")
+    qtbot.wait(50)
+    assert panel.wobble == 0.0

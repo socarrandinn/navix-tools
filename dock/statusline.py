@@ -45,6 +45,18 @@ def recorder_command(executable: str, script: str) -> str:
     return f'"{executable}" "{script}"'
 
 
+def default_recorder_command() -> str:
+    return recorder_command(sys.executable, str(ROOT / "ipdock_statusline.py"))
+
+
+def is_installed(settings: Path, command: str) -> bool:
+    try:
+        current = _read_settings(settings).get("statusLine")
+    except (OSError, ValueError):
+        return False
+    return isinstance(current, dict) and current.get("command") == command
+
+
 def run_chained(command: str, stdin_text: str) -> str:
     proc = subprocess.run(
         command, shell=True, input=stdin_text.encode("utf-8"), capture_output=True, timeout=5,
@@ -109,8 +121,7 @@ def uninstall(settings: Path, chain: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["install"]:
-        script = ROOT / "ipdock_statusline.py"
-        print(install(settings_path(), chain_path(), recorder_command(sys.executable, str(script))))
+        print(install(settings_path(), chain_path(), default_recorder_command()))
         return 0
     if argv[:1] == ["uninstall"]:
         print(uninstall(settings_path(), chain_path()))

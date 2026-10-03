@@ -80,8 +80,18 @@ Agregar una app: crear `dock/tools/<nombre>.py` con una clase que herede `dock.t
 (`title`, `icon` = nombre de un SVG en `dock/assets/icons` o 1-2 caracteres, `refresh_ms`, `create_widget()`, `refresh()`) y `create_tool()`, y sumar
 `<nombre>` a `tools` en `dock.json`.
 
+### Configuración
+
+Engranaje al final de la barra (o clic derecho → Configuración):
+
+- **Planes de IA**: qué planes mostrar (Claude, Codex) y activar/desactivar el registrador de Claude.
+- **Red (IP)**: adaptador y perfiles de IP fija (agregar, editar, quitar). Guardar pide UAC una vez:
+  los perfiles se validan y se escriben en `C:\ProgramData\ipswitch\config.json` con permisos de admin.
+- **Apariencia**: borde (derecha, izquierda, arriba), ancho de las apps y efecto líquido.
+
 Config en `%APPDATA%\ipdock\dock.json` (se guarda solo al mover o fijar):
 
 ```json
-{"edge": "right", "width": 320, "tools": ["ip_switch", "ai_usage"], "pinned": false, "position": 0.5}
+{"edge": "right", "width": 320, "tools": ["ip_switch", "ai_usage"], "pinned": false, "position": 0.5,
+ "ai_sources": ["claude", "codex"], "liquid": true}
 ```

@@ -91,3 +91,14 @@ def test_install_and_uninstall_without_previous_status_line(tmp_path):
 def test_recorder_command_quotes_paths():
     assert recorder_command(r"C:\venv\Scripts\python.exe", r"E:\My Tools\ipdock_statusline.py") == \
         '"C:\\venv\\Scripts\\python.exe" "E:\\My Tools\\ipdock_statusline.py"'
+
+
+def test_is_installed(tmp_path):
+    from dock.statusline import is_installed
+
+    settings, chain = tmp_path / "settings.json", tmp_path / "chain.json"
+    assert is_installed(settings, "RECORDER") is False
+    write_json(settings, {"statusLine": CAVEMAN})
+    assert is_installed(settings, "RECORDER") is False
+    install(settings, chain, "RECORDER")
+    assert is_installed(settings, "RECORDER") is True

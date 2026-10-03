@@ -80,3 +80,16 @@ def test_read_error_is_shown_not_raised(qtbot):
     tool.test_widget = widget
     tool.refresh()
     assert "disco" in tool.message.text()
+
+
+def test_disabled_sources_are_hidden(qtbot):
+    tool = AiUsageTool(read_claude=lambda: CLAUDE, read_codex=lambda: CODEX, now=lambda: NOW, run=run_sync,
+                       sources=lambda: ("codex",))
+    widget = tool.create_widget()
+    qtbot.addWidget(widget)
+    tool.test_widget = widget
+    tool.refresh()
+    assert tool.headers["Claude"].isHidden()
+    assert tool.rows["Claude"] == []
+    assert not tool.headers["Codex"].isHidden()
+    assert len(tool.rows["Codex"]) == 1

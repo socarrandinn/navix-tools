@@ -7,6 +7,7 @@ GRIP = 20         # zona de agarre para arrastrar
 ICON = 30         # botón de cada app
 ICON_GAP = 4
 BAR_PADDING = 8
+SETTINGS_SLOT = 24  # engranaje de configuración al final de la barra
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
 MARGIN = 12       # separación mínima a lo largo del borde
 PANEL_HEIGHT = 420
@@ -22,7 +23,7 @@ def is_vertical(edge: str) -> bool:
 
 
 def bar_length(tools: int) -> int:
-    return GRIP + max(1, tools) * (ICON + ICON_GAP) + BAR_PADDING + 2 * FLARE
+    return GRIP + max(1, tools) * (ICON + ICON_GAP) + SETTINGS_SLOT + BAR_PADDING + 2 * FLARE
 
 
 def bar_rect(area: Rect, edge: str, position: float, length: int, thickness: int = BAR,
