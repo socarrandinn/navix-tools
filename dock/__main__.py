@@ -19,8 +19,15 @@ from .single import acquire_single_instance
 INSTANCE_NAME = "ipdock-single-instance"
 
 
+def configure_app(app: QApplication) -> None:
+    # La barra es una ventana de herramienta: Qt no la cuenta, así que al cerrar Configuración
+    # (la única ventana normal) terminaba la app. Se sale solo con ✕ o Salir.
+    app.setQuitOnLastWindowClosed(False)
+
+
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv[:1])
+    configure_app(app)
     server = acquire_single_instance(INSTANCE_NAME)
     if server is None:
         return 0
