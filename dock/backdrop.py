@@ -7,6 +7,7 @@ DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 DWMWA_WINDOW_CORNER_PREFERENCE = 33
 DWMWA_SYSTEMBACKDROP_TYPE = 38
 DWMWCP_ROUND = 2
+DWMSBT_NONE = 1
 DWMSBT_TRANSIENTWINDOW = 3  # acrylic
 
 
@@ -19,8 +20,12 @@ def _set_attribute(dwm, hwnd: int, attribute: int, value: int) -> int:
     return dwm.DwmSetWindowAttribute(wintypes.HWND(hwnd), attribute, ctypes.byref(data), ctypes.sizeof(data))
 
 
-def apply_backdrop(hwnd: int) -> bool:
-    """Activa acrylic + esquinas redondeadas (Win11 22H2+). False si DWM lo rechaza."""
+def apply_backdrop(hwnd: int, enabled: bool = True) -> bool:
+    """Activa (o apaga) acrylic + esquinas redondeadas (Win11 22H2+). False si DWM lo rechaza.
+
+    El backdrop de DWM cubre el rectángulo completo de la ventana, por eso se apaga mientras
+    el panel es un círculo.
+    """
     if not hwnd:
         return False
     try:
@@ -32,4 +37,5 @@ def apply_backdrop(hwnd: int) -> bool:
         return False
     _set_attribute(dwm, hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, 1)
     _set_attribute(dwm, hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)
-    return _set_attribute(dwm, hwnd, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW) == 0
+    kind = DWMSBT_TRANSIENTWINDOW if enabled else DWMSBT_NONE
+    return _set_attribute(dwm, hwnd, DWMWA_SYSTEMBACKDROP_TYPE, kind) == 0

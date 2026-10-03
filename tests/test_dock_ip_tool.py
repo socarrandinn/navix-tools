@@ -33,7 +33,7 @@ class Deferred:
         run_sync(*self.pending.pop(0))
 
 
-def make(qtbot, load=lambda: CONFIG, read=None, switch=None, run=run_sync):
+def make(qtbot, load=lambda: CONFIG, read=None, switch=None, run=run_sync, settle_ms=60_000):
     reads = []
 
     def default_read(adapter):
@@ -41,7 +41,8 @@ def make(qtbot, load=lambda: CONFIG, read=None, switch=None, run=run_sync):
         return STATIC
 
     tool = IpSwitchTool(load=load, read=read or default_read,
-                        switch=switch or (lambda action, profile=None: Result("1", True, "ok")), run=run)
+                        switch=switch or (lambda action, profile=None: Result("1", True, "ok")), run=run,
+                        settle_ms=settle_ms)
     widget = tool.create_widget()
     qtbot.addWidget(widget)
     # En el panel la tarjeta es dueña del widget; aquí hay que mantenerlo vivo.
@@ -128,3 +129,34 @@ def test_config_error_shows_install_hint(qtbot):
     assert tool.label.text() == "Sin estado"
     assert "install" in tool.message.text()
     assert tool.buttons == []
+
+
+def active(tool):
+    return [b.text() for b in tool.buttons if b.property("active")]
+
+
+def test_active_profile_button_is_highlighted(qtbot):
+    tool, _ = make(qtbot)
+    tool.refresh()
+    assert active(tool) == ["Casa"]
+
+
+def test_dhcp_button_is_highlighted_when_dhcp(qtbot):
+    tool, _ = make(qtbot, read=lambda adapter: DHCP)
+    tool.refresh()
+    assert active(tool) == ["DHCP"]
+
+
+def test_no_button_highlighted_for_unknown_static_ip(qtbot):
+    other = AdapterStatus(False, "10.0.0.7", 8, "10.0.0.1", ())
+    tool, _ = make(qtbot, read=lambda adapter: other)
+    tool.refresh()
+    assert active(tool) == []
+
+
+def test_refreshes_again_after_switch_settles(qtbot):
+    tool, reads = make(qtbot, settle_ms=20)
+    tool.refresh()
+    tool.switch("dhcp")
+    assert len(reads) == 2
+    qtbot.waitUntil(lambda: len(reads) == 3, timeout=1000)

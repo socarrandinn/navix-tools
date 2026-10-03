@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ipswitch.actions import active_label
@@ -29,18 +30,22 @@ class IpSwitchTool(Tool):
         read=read_status,
         switch=request_switch,
         run: RunAsync = run_async,
+        settle_ms: int = 3000,
     ):
         self._load = load or (lambda: load_config(default_config_path()))
         self._read = read
         self._switch = switch
         self._run = run
+        self.settle_ms = settle_ms
         self.busy = False
         self.loading = False
         self.buttons: list[QPushButton] = []
+        self._button_keys: list[tuple[str, str | None]] = []
         self._button_names: tuple[str, ...] | None = None
 
     def create_widget(self) -> QWidget:
         widget = QWidget()
+        self.widget = widget
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
         row = QHBoxLayout()
@@ -76,6 +81,11 @@ class IpSwitchTool(Tool):
         self.label.setToolTip(describe(status))
         self._set_dot(BLUE if status.dhcp else GREEN)
         self._build_buttons(tuple(p.name for p in config.profiles))
+        active = ("dhcp", None) if status.dhcp else next(
+            (("profile", p.name) for p in config.profiles if p.ip == status.ip and p.prefix == status.prefix),
+            None,
+        )
+        self._mark_active(active)
 
     def _show_error(self, exc: Exception) -> None:
         self.loading = False
@@ -91,6 +101,7 @@ class IpSwitchTool(Tool):
             self.grid.removeWidget(button)
             button.deleteLater()
         self.buttons = []
+        self._button_keys = []
         self._button_names = names
         options = [("DHCP", "dhcp", None)] + [(name, "profile", name) for name in names]
         for index, (text, action, profile) in enumerate(options):
@@ -98,6 +109,13 @@ class IpSwitchTool(Tool):
             button.clicked.connect(lambda _checked=False, a=action, p=profile: self.switch(a, p))
             self.grid.addWidget(button, index // 2, index % 2)
             self.buttons.append(button)
+            self._button_keys.append((action, profile))
+
+    def _mark_active(self, active: tuple[str, str | None] | None) -> None:
+        for button, key in zip(self.buttons, self._button_keys):
+            button.setProperty("active", key == active)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
     def switch(self, action: str, profile: str | None = None) -> None:
         if self.busy:
@@ -112,6 +130,8 @@ class IpSwitchTool(Tool):
         self._enable(True)
         self._set_message(result.message, GREY if result.ok else RED)
         self.refresh()
+        # DHCP tarda unos segundos en obtener lease: segundo refresco cuando se asienta.
+        QTimer.singleShot(self.settle_ms, self.widget, self.refresh)
 
     def _switch_failed(self, exc: Exception) -> None:
         self.busy = False

@@ -49,3 +49,21 @@ Editar `C:\ProgramData\ipswitch\config.json` con un editor abierto como administ
 .\.venv\Scripts\python -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python -m pytest
 ```
+
+## Panel (IPDock)
+
+```powershell
+.\.venv\Scripts\pythonw -m dock
+```
+
+- Círculo azul "IP" de 50 px pegado al borde de la pantalla.
+- Pasá el mouse (o hacé clic) para abrir el panel; se cierra solo al sacar el mouse.
+- Arrastrá el círculo para moverlo: al soltarlo se pega al borde izquierdo o derecho más cercano.
+- 📌 deja el panel fijo abierto; ✕ cierra la app. Clic derecho en el círculo: Fijar panel / Salir.
+- El botón del modo activo (DHCP o perfil) aparece resaltado.
+
+Config en `%APPDATA%\ipdock\dock.json` (se guarda solo al mover o fijar):
+
+```json
+{"edge": "right", "width": 320, "backdrop": "acrylic", "tools": ["ip_switch"], "pinned": false, "position": 0.5}
+```

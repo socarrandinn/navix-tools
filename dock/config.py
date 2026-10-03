@@ -21,6 +21,8 @@ class DockConfig:
     width: int = 320
     backdrop: str = "acrylic"
     tools: tuple[str, ...] = ("ip_switch",)
+    pinned: bool = False
+    position: float = 0.5
 
 
 def dock_dir() -> Path:
@@ -62,4 +64,11 @@ def load_dock_config(path: Path) -> DockConfig:
     for name in tools:
         if not isinstance(name, str) or not TOOL_NAME.match(name):
             raise DockConfigError(f"{path}: nombre de herramienta inválido: {name!r}")
-    return DockConfig(edge=edge, width=width, backdrop=backdrop, tools=tuple(tools))
+    pinned = raw.get("pinned", default.pinned)
+    if not isinstance(pinned, bool):
+        raise DockConfigError(f"{path}: pinned debe ser true o false")
+    position = raw.get("position", default.position)
+    if isinstance(position, bool) or not isinstance(position, (int, float)) or not 0 <= position <= 1:
+        raise DockConfigError(f"{path}: position debe ser un número entre 0 y 1")
+    return DockConfig(edge=edge, width=width, backdrop=backdrop, tools=tuple(tools),
+                      pinned=pinned, position=float(position))
