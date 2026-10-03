@@ -2,8 +2,8 @@ from __future__ import annotations
 
 Rect = tuple[int, int, int, int]
 
-BAR = 54          # grosor de la barra de apps (riel + columna de íconos)
-RAIL = 10         # riel de arrastre, a todo lo largo del lado pegado a la pantalla
+BAR = 60          # grosor de la barra con el riel visible (riel + columna de íconos)
+RAIL = 16         # riel de arrastre, a todo lo largo del lado pegado a la pantalla (con padding)
 ICON = 28         # botón de cada app
 ICON_GAP = 4
 END_PAD = 16      # aire en cada extremo de la columna de íconos
