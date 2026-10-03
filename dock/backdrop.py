@@ -23,8 +23,8 @@ def _set_attribute(dwm, hwnd: int, attribute: int, value: int) -> int:
 def apply_backdrop(hwnd: int, enabled: bool = True) -> bool:
     """Activa (o apaga) acrylic + esquinas redondeadas (Win11 22H2+). False si DWM lo rechaza.
 
-    El backdrop de DWM cubre el rectángulo completo de la ventana, por eso se apaga mientras
-    el panel es un círculo.
+    El backdrop de DWM cubre el rectángulo completo de la ventana; el panel es siempre un
+    rectángulo (barra o barra + app), así que queda activo en ambos estados.
     """
     if not hwnd:
         return False
