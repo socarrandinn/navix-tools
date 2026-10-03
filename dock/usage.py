@@ -75,8 +75,23 @@ def age_text(captured_at: datetime | None, now: datetime) -> str:
     return f"actualizado hace {int(seconds // 86400)} d"
 
 
+def _epoch(value) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(float(value), timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def _iso(value) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _window(label: str, percent, resets_at, now: datetime) -> UsageWindow:
-    reset = datetime.fromtimestamp(float(resets_at), timezone.utc) if resets_at is not None else None
+    # Un dato de reinicio inválido no debe tirar el porcentaje: se muestra sin "reinicia en".
+    reset = _epoch(resets_at)
     if reset is not None and reset <= now:
         # La ventana ya se reinició desde que se tomó el dato.
         return UsageWindow(label, 0.0, None)
@@ -132,8 +147,7 @@ def _codex_snapshot(line: str, now: datetime) -> UsageSnapshot | None:
         )
         if not windows:
             return None
-        stamp = event.get("timestamp")
-        captured = datetime.fromisoformat(stamp) if stamp else None
+        captured = _iso(event.get("timestamp"))
         return UsageSnapshot(
             "Codex",
             tuple(_window(window_label(int(p.get("window_minutes") or 0)), p["used_percent"],

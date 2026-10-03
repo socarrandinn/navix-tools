@@ -143,3 +143,17 @@ def test_read_codex_missing_dir_or_garbage(tmp_path):
 @pytest.mark.parametrize("percent, level", [(0, "ok"), (69.9, "ok"), (70, "warn"), (89.9, "warn"), (90, "high")])
 def test_window_level(percent, level):
     assert UsageWindow("5 h", percent, None).level == level
+
+
+def test_malformed_reset_or_timestamp_keeps_the_percentages(tmp_path):
+    path = tmp_path / "claude_usage.json"
+    path.write_text(json.dumps({"captured_at": TS, "five_hour": {"used_percentage": 40, "resets_at": "mañana"}}),
+                    encoding="utf-8")
+    window = read_claude(path, NOW).windows[0]
+    assert (window.percent, window.resets_at) == (40.0, None)
+    bad_codex = json.dumps({"timestamp": "ayer", "type": "event_msg", "payload": {"rate_limits": {
+        "primary": {"used_percent": 55.0, "window_minutes": 300, "resets_at": "pronto"}}}})
+    write_rollout(tmp_path / "codex", "02", "bad", [bad_codex])
+    snap = read_codex(tmp_path / "codex", NOW)
+    assert snap.captured_at is None
+    assert [(w.label, w.percent, w.resets_at) for w in snap.windows] == [("5 h", 55.0, None)]
