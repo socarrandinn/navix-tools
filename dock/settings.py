@@ -29,31 +29,32 @@ from ipswitch.config import AppConfig, ConfigError, parse_config
 
 from .config import DockConfig
 from .icons import svg_icon
+from .theme import themed
 from .worker import RunAsync, run_async
 
 COLUMNS = ("Nombre", "IP", "Prefijo", "Gateway", "DNS")
 EDGE_LABELS = (("Derecha", "right"), ("Izquierda", "left"), ("Arriba", "top"))
 
-STYLE = """
+STYLE = themed("""
 QWidget { background: #161922; color: #e6edf3; font-family: 'Segoe UI'; font-size: 13px; }
 QListWidget { background: #11131a; border: none; padding: 8px; outline: none; }
-QListWidget::item { padding: 10px 12px; border-radius: 10px; margin: 2px 0; }
+QListWidget::item { padding: 10px 12px; border-radius: @controlpx; margin: 2px 0; }
 QListWidget::item:selected { background: #263247; color: #ffffff; }
 QLabel#pageTitle { font-size: 18px; font-weight: 600; }
 QLabel#hint { color: #8b949e; }
 QLabel#message { color: #79c0ff; }
-QPushButton { background: #232838; border: 1px solid #343b4f; border-radius: 10px; padding: 7px 14px; }
+QPushButton { background: #232838; border: 1px solid #343b4f; border-radius: @controlpx; padding: 7px 14px; }
 QPushButton:hover { background: #2c3347; }
 QPushButton:disabled { color: #6e7681; }
 QPushButton#primary { background: #2f6feb; border-color: #4c8dff; color: white; }
 QPushButton#primary:hover { background: #3b7bf5; }
-QComboBox, QSpinBox { background: #1d2130; border: 1px solid #343b4f; border-radius: 8px; padding: 5px 8px; }
-QTableWidget { background: #1a1e2a; border: 1px solid #2b3245; border-radius: 10px; gridline-color: #2b3245; }
+QComboBox, QSpinBox { background: #1d2130; border: 1px solid #343b4f; border-radius: @controlpx; padding: 5px 8px; }
+QTableWidget { background: #1a1e2a; border: 1px solid #2b3245; border-radius: @cardpx; gridline-color: #2b3245; }
 QHeaderView::section { background: #1f2433; color: #9da7b3; border: none; padding: 6px; }
 QCheckBox { spacing: 8px; }
-QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #4c566a; border-radius: 5px; background: #1d2130; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #4c566a; border-radius: @smallpx; background: #1d2130; }
 QCheckBox::indicator:checked { background: #2f6feb; border-color: #4c8dff; }
-"""
+""")
 
 
 def _title(text: str, hint: str) -> list[QWidget]:

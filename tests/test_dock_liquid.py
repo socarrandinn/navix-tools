@@ -80,3 +80,15 @@ def test_vertical_bridge_for_top_edge(qapp):
     neck = bridge_path(top, bottom, horizontal=False, thickness=30)
     assert inside(neck, 100, 46)
     assert not inside(neck, 20, 46)
+
+
+def test_bridge_union_is_at_most_30px(qapp):
+    from dock.liquid import NECK_MAX
+
+    left, right = QRectF(0, 0, 300, 400), QRectF(310, 0, 44, 400)
+    for thickness in (5, 20, 60, 200):
+        box = bridge_path(left, right, horizontal=True, thickness=thickness).boundingRect()
+        assert box.height() <= NECK_MAX + 0.5
+    top, bottom = QRectF(0, 0, 400, 44), QRectF(0, 54, 400, 300)
+    box = bridge_path(top, bottom, horizontal=False, thickness=200).boundingRect()
+    assert box.width() <= NECK_MAX + 0.5

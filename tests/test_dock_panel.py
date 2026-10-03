@@ -417,13 +417,19 @@ def gap_point(panel):
     return QPoint(round((bar.left() + flyout.right()) / 2), round(bar.center().y()))
 
 
-def test_open_buds_a_separate_drop(qtbot):
+def test_open_app_stays_joined_to_the_bar_by_a_thin_neck(qtbot):
+    from dock.liquid import NECK_MAX
+
     panel, _ = make_panel(qtbot)
     panel.open_tool("contador")
     assert panel.bud == 1.0
     flyout = panel.flyout.geometry()
     assert panel.shape().contains(QPointF(flyout.center()))
-    assert not panel.shape().contains(QPointF(gap_point(panel)))
+    assert panel.shape().contains(QPointF(gap_point(panel)))
+    assert 0 < panel._neck_thickness() < NECK_MAX
+    gap = gap_point(panel)
+    joined = [y for y in range(rect(panel)[3]) if panel.shape().contains(QPointF(gap.x(), y + 0.5))]
+    assert len(joined) <= NECK_MAX
     assert panel.flyout_opacity() == 1.0
 
 
@@ -497,3 +503,47 @@ def test_sliding_along_the_edge_does_not_detach(qtbot):
     panel.end_drag(start + QPoint(0, 200))
     assert state["saved"][-1].edge == "right"
     assert state["saved"][-1].position > 0.5
+
+
+def test_neck_between_bar_and_app_never_exceeds_30px(qtbot):
+    from dock.liquid import NECK_MAX
+
+    panel, _ = make_panel(qtbot)
+    panel.open_tool("contador")
+    for bud in (0.05, 0.3, 0.6):
+        panel.set_bud(bud)
+        assert panel._neck_thickness() <= NECK_MAX
+    start = bar_center(panel)
+    panel.conceal()
+    panel.begin_drag(bar_center(panel))
+    panel.drag_to(bar_center(panel) - QPoint(10, 0))
+    x, y, w, h = rect(panel)
+    shape = panel.shape()
+    inside = [yy for yy in range(h) if shape.contains(QPointF(w - 3, yy + 0.5))]
+    assert len(inside) <= NECK_MAX + 2
+
+
+
+@pytest.mark.parametrize("edge, pull", [("right", QPoint(-30, 0)), ("left", QPoint(30, 0)), ("top", QPoint(0, 30))])
+def test_stretching_keeps_icons_centered_inside_the_drop(qtbot, edge, pull):
+    panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
+    panel.show()
+    qtbot.waitExposed(panel)
+    start = bar_center(panel)
+    panel.begin_drag(start)
+    panel.drag_to(start + pull)
+    assert panel._pull > 0 and not panel.detached
+    qtbot.wait(20)
+    x, y, w, h = rect(panel)
+    button = panel.tool_buttons["contador"]
+    center = button.mapTo(panel, button.rect().center())
+    if edge == "right":
+        body = (0, BAR)
+        value = center.x()
+    elif edge == "left":
+        body = (w - BAR, w)
+        value = center.x()
+    else:
+        body = (h - BAR, h)
+        value = center.y()
+    assert body[0] + 15 <= value <= body[1] - 15

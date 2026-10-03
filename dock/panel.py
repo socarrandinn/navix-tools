@@ -53,42 +53,44 @@ from .geometry import (
     snap,
     stretched_rect,
 )
-from .liquid import bridge_path, droplet_path, paint_liquid
+from .liquid import NECK_MAX, bridge_path, droplet_path, paint_liquid
 from .icons import svg_icon
 from .registry import LoadedTool
+from .theme import R_SMALL, R_SURFACE, themed
 from .tool import Tool
 
 DRAG_THRESHOLD = 4
 QT_MAX = 16777215
-EXPANDED_RADIUS = 22
+EXPANDED_RADIUS = R_SURFACE
 WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
 HOVER_JIGGLE = 0.4
 DETACH_DISTANCE = 70  # px que hay que tirar hacia adentro para despegar la gota
 PULL_GAIN = 0.6       # cuánto se estira la gota por cada px de tirón
+NECK_REST = 14        # grosor del cuello que mantiene la app unida a la barra
 
-STYLE = """
+STYLE = themed("""
 QWidget { color: #f0f4f8; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
-QToolButton#appIcon { border: none; border-radius: 15px; font-size: 14px; font-weight: 600; }
+QToolButton#appIcon { border: none; border-radius: @iconpx; font-size: 14px; font-weight: 600; }
 QToolButton#appIcon:hover { background: rgba(255, 255, 255, 46); }
 QToolButton#appIcon:checked { background: rgba(255, 255, 255, 70); border: 1px solid rgba(255, 255, 255, 120); }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; }
-QPushButton#headerButton { background: transparent; border: none; border-radius: 10px; padding: 2px 7px;
+QPushButton#headerButton { background: transparent; border: none; border-radius: @controlpx; padding: 2px 7px;
                            font-size: 13px; }
 QPushButton#headerButton:hover { background: rgba(255, 255, 255, 46); }
 QPushButton#headerButton:checked { background: rgba(255, 255, 255, 80); }
-QFrame#card { background: rgba(255, 255, 255, 16); border: 1px solid rgba(255, 255, 255, 34); border-radius: 14px; }
+QFrame#card { background: rgba(255, 255, 255, 16); border: 1px solid rgba(255, 255, 255, 34); border-radius: @cardpx; }
 QLabel#cardError { color: #ff7b72; }
 QPushButton { background: rgba(255, 255, 255, 34); border: 1px solid rgba(255, 255, 255, 60);
-              border-radius: 12px; padding: 6px 10px; }
+              border-radius: @controlpx; padding: 6px 10px; }
 QPushButton:hover { background: rgba(255, 255, 255, 56); }
 QPushButton:disabled { color: #8b949e; }
 QPushButton[active="true"] { background: rgba(120, 190, 255, 90); border-color: rgba(170, 215, 255, 220); }
-QProgressBar { background: rgba(255, 255, 255, 26); border: none; border-radius: 7px;
+QProgressBar { background: rgba(255, 255, 255, 26); border: none; border-radius: @smallpx;
                text-align: center; font-size: 11px; min-height: 16px; }
-QProgressBar::chunk { background: rgba(63, 185, 80, 210); border-radius: 7px; }
+QProgressBar::chunk { background: rgba(63, 185, 80, 210); border-radius: @smallpx; }
 QProgressBar[level="warn"]::chunk { background: rgba(210, 153, 34, 220); }
 QProgressBar[level="high"]::chunk { background: rgba(248, 81, 73, 220); }
-"""
+""", icon=ICON)
 
 
 class Grip(QWidget):
@@ -553,9 +555,10 @@ class Panel(QWidget):
         self._path = path
 
     def _neck_thickness(self) -> float:
-        # Grueso al principio; se afina y se corta cuando la gota ya casi terminó de salir.
+        # Grueso al principio; se afina hasta un cuello fino que mantiene la app unida a la barra.
         t = max(0.0, min(1.0, (self.bud - 0.5) / 0.38))
-        return self.bar_len * 0.55 * (1.0 - t * t * (3 - 2 * t))
+        start = min(NECK_MAX, self.bar_len * 0.55)
+        return NECK_REST + (start - NECK_REST) * (1.0 - t * t * (3 - 2 * t))
 
     def _blob_rect(self, bar: QRectF, final: QRectF, growth: float) -> QRectF:
         growth = min(growth, 1.05)
@@ -577,7 +580,7 @@ class Panel(QWidget):
         edge = self.config.edge
         progress = min(1.0, self._pull / (DETACH_DISTANCE * PULL_GAIN))
         # Pie: un "charquito" pegado al borde que se achica a medida que la gota se estira.
-        foot_len = max(24.0, self.bar_len * 0.75 * (1.0 - progress))
+        foot_len = max(18.0, NECK_MAX * (1.0 - 0.4 * progress))
         if edge == "right":
             body = QRectF(0, 0, BAR, height)
             foot = QRectF(width - 8, (height - foot_len) / 2, 8, foot_len)
@@ -587,11 +590,11 @@ class Panel(QWidget):
         else:
             body = QRectF(0, height - BAR, width, BAR)
             foot = QRectF((width - foot_len) / 2, 0, foot_len, 8)
-        thickness = max(10.0, self.bar_len * 0.5 * (1.0 - progress))
+        thickness = max(8.0, NECK_MAX * (1.0 - progress))
         path = QPainterPath()
         path.addRoundedRect(body, BAR / 2, BAR / 2)
         foot_path = QPainterPath()
-        foot_path.addRoundedRect(foot, 4, 4)
+        foot_path.addRoundedRect(foot, R_SMALL / 2, R_SMALL / 2)
         return path.united(foot_path).united(bridge_path(foot, body, horizontal=is_vertical(edge),
                                                          thickness=thickness))
 
@@ -677,6 +680,7 @@ class Panel(QWidget):
         self._pull = max(0.0, inward) * PULL_GAIN
         rect = stretched_rect(self._area(), edge, self._drag_position, self.bar_len, self._pull)
         self.setGeometry(QRect(*rect))
+        self._set_pull_margin(round(self._pull))
         self._refresh_shape()
 
     def _position_after(self, along: int) -> float:
@@ -690,10 +694,18 @@ class Panel(QWidget):
             value = (start_x + along - ax - MARGIN) / travel
         return round(max(0.0, min(1.0, value)), 4)
 
+    def _set_pull_margin(self, pull: int) -> None:
+        """Mientras se estira, los íconos acompañan al cuerpo de la gota (no al pie en el borde)."""
+        edge = self.config.edge
+        margins = {"right": (0, 0, pull, 0), "left": (pull, 0, 0, 0), "top": (0, pull, 0, 0)}[edge]
+        self.layout().setContentsMargins(*margins)
+        self.layout().activate()
+
     def _detach(self, global_pos: QPoint) -> None:
         """La gota se corta del borde y sigue al mouse como una cápsula suelta."""
         self.detached = True
         self._pull = 0.0
+        self._set_pull_margin(0)
         _, _, width, height = bar_rect(self._area(), self.config.edge, self._drag_position, self.bar_len)
         self._press_offset = QPoint(width // 2, height // 2)
         self.setGeometry(QRect(global_pos - self._press_offset, QSize(width, height)))
@@ -716,6 +728,7 @@ class Panel(QWidget):
             self._arrange()
         else:
             self._pull = 0.0
+            self._set_pull_margin(0)
             if self._drag_position != self.config.position:
                 self._save(position=self._drag_position)
         self._settle()

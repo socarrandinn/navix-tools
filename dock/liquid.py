@@ -14,6 +14,7 @@ from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 
 SAMPLES = 220
+NECK_MAX = 30  # ancho máximo de la unión entre dos gotas, en px
 WAVES = 1.5  # ondas a lo largo de la gota
 
 
@@ -97,8 +98,8 @@ def bridge_path(a: QRectF, b: QRectF, horizontal: bool, thickness: float) -> QPa
         if bottom <= top:
             return path
         cy = (top + bottom) / 2
-        attach = min((bottom - top) / 2, thickness / 2 + 10)
-        mid = thickness / 2
+        attach = min((bottom - top) / 2, NECK_MAX / 2)
+        mid = min(thickness / 2, attach - 4)  # más fino en el medio: lados cóncavos
         # Los extremos se anclan dentro de cada gota para que el cuello no asome por las esquinas.
         x0 = first.right() - min(first.width() / 2, 18)
         x1 = second.left() + min(second.width() / 2, 18)
@@ -113,8 +114,8 @@ def bridge_path(a: QRectF, b: QRectF, horizontal: bool, thickness: float) -> QPa
         if right <= left:
             return path
         cx = (left + right) / 2
-        attach = min((right - left) / 2, thickness / 2 + 10)
-        mid = thickness / 2
+        attach = min((right - left) / 2, NECK_MAX / 2)
+        mid = min(thickness / 2, attach - 4)  # más fino en el medio: lados cóncavos
         y0 = first.bottom() - min(first.height() / 2, 18)
         y1 = second.top() + min(second.height() / 2, 18)
         ym = (y0 + y1) / 2
