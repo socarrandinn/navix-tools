@@ -14,11 +14,11 @@ class CommandResult:
 Runner = Callable[[Sequence[str]], CommandResult]
 
 
-def run_command(args: Sequence[str], encoding: str = "oem") -> CommandResult:
+def run_command(args: Sequence[str], encoding: str = "oem", stdout_only_on_success: bool = False) -> CommandResult:
     proc = subprocess.run(
         list(args),
         capture_output=True,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    output = (proc.stdout + proc.stderr).decode(encoding, errors="replace").strip()
-    return CommandResult(proc.returncode, output)
+    raw = proc.stdout if proc.returncode == 0 and stdout_only_on_success else proc.stdout + proc.stderr
+    return CommandResult(proc.returncode, raw.decode(encoding, errors="replace").strip())
