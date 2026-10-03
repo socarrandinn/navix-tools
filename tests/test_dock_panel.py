@@ -6,13 +6,14 @@ from PySide6.QtWidgets import QLabel
 
 from dock.backdrop import apply_backdrop
 from dock.config import DockConfig
-from dock.geometry import BAR, bar_height
+from dock.geometry import BAR, bar_length, bar_rect, expanded_rect
 from dock.panel import Panel
 from dock.registry import LoadedTool
 from dock.single import acquire_single_instance
 from dock.tool import Tool
 
 AREA = (0, 0, 1920, 1040)
+BAR2 = bar_length(2)
 
 
 class CountingTool(Tool):
@@ -77,8 +78,8 @@ def leave(panel):
 
 def test_starts_collapsed_as_small_bar_with_one_icon_per_app(qtbot):
     panel, _ = make_panel(qtbot)
-    x, y, w, h = rect(panel)
-    assert (x, w, h) == (1920 - 12 - BAR, BAR, bar_height(2))
+    assert rect(panel) == bar_rect(AREA, "right", 0.5, BAR2)
+    assert rect(panel)[0] + BAR == 1920
     assert panel.revealed is False
     assert panel.flyout.isHidden()
     assert [b.text() for b in panel.tool_buttons.values()] == ["C", "O"]
@@ -92,8 +93,7 @@ def test_click_icon_opens_that_app_next_to_bar(qtbot):
     assert panel.current == "otra"
     assert panel.stack.currentWidget() is panel.cards["otra"]
     assert panel.title.text() == "Otra"
-    x, y, w, h = rect(panel)
-    assert (x, w, h) == (1920 - 12 - BAR - 320, BAR + 320, 400)
+    assert rect(panel) == expanded_rect(AREA, "right", 0.5, BAR2, 320, 400)
     assert panel.tool_buttons["otra"].isChecked()
     assert not panel.tool_buttons["contador"].isChecked()
 
@@ -172,14 +172,14 @@ def test_drag_bar_to_left_snaps_and_saves(qtbot):
     panel, state = make_panel(qtbot)
     start = QPoint(1890, 500)
     panel.begin_drag(start)
-    panel.drag_to(QPoint(400, 300))
+    panel.drag_to(QPoint(100, 400))
     assert panel.dragging is True
-    panel.end_drag(QPoint(400, 300))
+    panel.end_drag(QPoint(100, 400))
     saved = state["saved"][-1]
     assert saved.edge == "left"
     assert 0.0 < saved.position < 0.5
     x, y, w, h = rect(panel)
-    assert (x, w) == (12, BAR)
+    assert (x, w) == (0, BAR)
     assert panel.revealed is False
 
 
@@ -199,7 +199,7 @@ def test_app_opens_inward_after_moving_to_left(qtbot):
     panel.drag_to(QPoint(100, 500))
     panel.end_drag(QPoint(100, 500))
     panel.open_tool("contador")
-    assert rect(panel)[0] == 12
+    assert rect(panel)[0] == 0
     panel.layout().activate()
     assert panel.bar.geometry().x() < panel.flyout.geometry().x()
 
@@ -223,7 +223,7 @@ def test_reposition_follows_area_change(qtbot):
     state["area"] = (0, 0, 1280, 720)
     panel.reposition()
     x, y, w, h = rect(panel)
-    assert (x, w) == (1280 - 12 - BAR - 320, BAR + 320)
+    assert (x, w) == (1280 - BAR - 320, BAR + 320)
     assert y + h <= 720 - 12
 
 
@@ -231,7 +231,7 @@ def test_expanded_height_fits_small_content(qtbot):
     panel, _ = make_panel(qtbot, fit_content=True)
     panel.open_tool("contador")
     h = rect(panel)[3]
-    assert bar_height(2) <= h < 400
+    assert BAR2 <= h < 400
 
 
 def test_initial_refresh_and_timers(qtbot):
@@ -301,3 +301,56 @@ def test_drag_from_grip_reaches_panel(qtbot):
     qtbot.mousePress(panel.grip, Qt.MouseButton.LeftButton, pos=panel.grip.rect().center())
     assert panel._press_global is not None
     panel.end_drag(start)
+
+
+def test_drag_to_top_makes_horizontal_bar_that_opens_down(qtbot):
+    panel, state = make_panel(qtbot)
+    panel.begin_drag(QPoint(1890, 500))
+    panel.drag_to(QPoint(960, 20))
+    panel.end_drag(QPoint(960, 20))
+    assert state["saved"][-1].edge == "top"
+    x, y, w, h = rect(panel)
+    assert (y, w, h) == (0, BAR2, BAR)
+    panel.open_tool("contador")
+    assert rect(panel)[1] == 0
+    panel.layout().activate()
+    assert panel.bar.geometry().y() < panel.flyout.geometry().y()
+    assert panel.bar.geometry().height() == BAR
+
+
+def test_top_config_starts_horizontal(qtbot):
+    panel, _ = make_panel(qtbot, config=DockConfig(backdrop="none", edge="top"))
+    assert rect(panel) == bar_rect(AREA, "top", 0.5, BAR2)
+
+
+def test_window_is_masked_to_a_droplet(qtbot):
+    panel, _ = make_panel(qtbot)
+    mask = panel.mask()
+    assert not mask.isEmpty()
+    assert mask.contains(QPoint(BAR // 2, BAR2 // 2))
+    assert not mask.contains(QPoint(0, 0))
+    panel.open_tool("contador")
+    assert panel.mask().contains(QPoint(rect(panel)[2] // 2, rect(panel)[3] // 2))
+
+
+def test_expand_animation_is_springy(qtbot):
+    from PySide6.QtCore import QEasingCurve
+
+    panel, _ = make_panel(qtbot)
+    panel.animation_ms = 50
+    panel.show()
+    qtbot.waitExposed(panel)
+    panel.open_tool("contador")
+    assert panel.animation.easingCurve().type() == QEasingCurve.Type.OutBack
+
+
+def test_svg_icon_names_render_as_icons(qtbot):
+    class SvgTool(CountingTool):
+        icon = "network"
+
+    panel, _ = make_panel(qtbot, [LoadedTool("red", SvgTool(), None)])
+    button = panel.tool_buttons["red"]
+    assert button.text() == ""
+    assert not button.icon().isNull()
+    assert not panel.pin_button.icon().isNull()
+    assert not panel.close_button.icon().isNull()

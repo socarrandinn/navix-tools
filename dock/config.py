@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
-EDGES = {"left", "right"}
+EDGES = {"left", "right", "top"}
 BACKDROPS = {"acrylic", "none"}
 
 
@@ -51,7 +51,7 @@ def load_dock_config(path: Path) -> DockConfig:
     default = DockConfig()
     edge = raw.get("edge", default.edge)
     if edge not in EDGES:
-        raise DockConfigError(f"{path}: edge debe ser left o right, no {edge!r}")
+        raise DockConfigError(f"{path}: edge debe ser left, right o top, no {edge!r}")
     width = raw.get("width", default.width)
     if not isinstance(width, int) or not 200 <= width <= 600:
         raise DockConfigError(f"{path}: width debe ser un entero entre 200 y 600")

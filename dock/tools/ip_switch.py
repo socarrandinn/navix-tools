@@ -22,7 +22,7 @@ RED = "#f85149"
 
 class IpSwitchTool(Tool):
     title = "Cambio de IP"
-    icon = "🌐"
+    icon = "network"
     refresh_ms = 10_000
 
     def __init__(

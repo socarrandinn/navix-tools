@@ -2,55 +2,70 @@ from __future__ import annotations
 
 Rect = tuple[int, int, int, int]
 
-BAR = 40          # ancho de la barra de apps
+BAR = 40          # grosor de la barra de apps
 GRIP = 20         # zona de agarre para arrastrar
 ICON = 30         # botón de cada app
 ICON_GAP = 4
 BAR_PADDING = 8
-MARGIN = 12
+FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
+MARGIN = 12       # separación mínima a lo largo del borde
 PANEL_HEIGHT = 420
+EDGES = ("left", "right", "top")
 
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
-def bar_height(tools: int) -> int:
-    return GRIP + max(1, tools) * (ICON + ICON_GAP) + BAR_PADDING
+def is_vertical(edge: str) -> bool:
+    return edge != "top"
 
 
-def bar_rect(area: Rect, edge: str, position: float, height: int, width: int = BAR, margin: int = MARGIN) -> Rect:
-    """Barra pegada al borde; position 0.0 = arriba, 1.0 = abajo del área disponible."""
+def bar_length(tools: int) -> int:
+    return GRIP + max(1, tools) * (ICON + ICON_GAP) + BAR_PADDING + 2 * FLARE
+
+
+def bar_rect(area: Rect, edge: str, position: float, length: int, thickness: int = BAR,
+             margin: int = MARGIN) -> Rect:
+    """Barra pegada al borde (sin margen) y ubicada a lo largo de él; position va de 0.0 a 1.0."""
     ax, ay, aw, ah = area
-    height = min(height, ah - 2 * margin)
-    travel = max(0, ah - 2 * margin - height)
-    y = ay + margin + round(_clamp(position, 0.0, 1.0) * travel)
-    x = ax + aw - width - margin if edge == "right" else ax + margin
-    return x, y, width, height
+    position = _clamp(position, 0.0, 1.0)
+    if is_vertical(edge):
+        length = min(length, ah - 2 * margin)
+        y = ay + margin + round(position * max(0, ah - 2 * margin - length))
+        x = ax + aw - thickness if edge == "right" else ax
+        return x, y, thickness, length
+    length = min(length, aw - 2 * margin)
+    x = ax + margin + round(position * max(0, aw - 2 * margin - length))
+    return x, ay, length, thickness
 
 
-def expanded_rect(
-    area: Rect,
-    edge: str,
-    position: float,
-    bar_h: int,
-    flyout_width: int,
-    content_height: int,
-    margin: int = MARGIN,
-) -> Rect:
-    """Barra + app desplegada hacia adentro de la pantalla, con el borde superior en la barra."""
+def expanded_rect(area: Rect, edge: str, position: float, length: int, flyout_width: int,
+                  content_height: int, margin: int = MARGIN) -> Rect:
+    """Barra + app desplegada hacia adentro de la pantalla, sin despegarse del borde."""
     ax, ay, aw, ah = area
-    height = min(max(bar_h, content_height), ah - 2 * margin)
-    _, bar_y, _, _ = bar_rect(area, edge, position, bar_h, margin=margin)
-    y = round(_clamp(bar_y, ay + margin, ay + ah - margin - height))
-    width = BAR + flyout_width
-    x = ax + aw - width - margin if edge == "right" else ax + margin
-    return x, y, width, height
+    bx, by, _, _ = bar_rect(area, edge, position, length, margin=margin)
+    if is_vertical(edge):
+        height = min(max(length, content_height), ah - 2 * margin)
+        y = round(_clamp(by, ay + margin, ay + ah - margin - height))
+        width = BAR + flyout_width
+        x = ax + aw - width if edge == "right" else ax
+        return x, y, width, height
+    width = min(max(length, flyout_width), aw - 2 * margin)
+    x = round(_clamp(bx, ax + margin, ax + aw - margin - width))
+    height = min(BAR + content_height, ah - margin)
+    return x, ay, width, height
 
 
-def snap(area: Rect, x: int, y: int, height: int, width: int = BAR, margin: int = MARGIN) -> tuple[str, float]:
-    """Borde más cercano y posición vertical para una barra soltada con esquina superior izquierda en (x, y)."""
+def snap(area: Rect, x: int, y: int, width: int, height: int, margin: int = MARGIN) -> tuple[str, float]:
+    """Borde más cercano (izquierdo, derecho o superior) y posición para una barra soltada en (x, y)."""
     ax, ay, aw, ah = area
-    edge = "left" if x + width / 2 < ax + aw / 2 else "right"
-    travel = max(1, ah - 2 * margin - height)
-    return edge, round(_clamp((y - ay - margin) / travel, 0.0, 1.0), 4)
+    cx, cy = x + width / 2, y + height / 2
+    length = max(width, height)
+    distances = {"left": cx - ax, "right": ax + aw - cx, "top": cy - ay}
+    edge = min(distances, key=distances.get)
+    if is_vertical(edge):
+        travel = max(1, ah - 2 * margin - length)
+        return edge, round(_clamp((cy - length / 2 - ay - margin) / travel, 0.0, 1.0), 4)
+    travel = max(1, aw - 2 * margin - length)
+    return edge, round(_clamp((cx - length / 2 - ax - margin) / travel, 0.0, 1.0), 4)

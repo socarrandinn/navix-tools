@@ -163,4 +163,4 @@ def test_refreshes_again_after_switch_settles(qtbot):
 
 
 def test_ip_tool_has_its_own_bar_icon():
-    assert IpSwitchTool.icon == "🌐"
+    assert IpSwitchTool.icon == "network"

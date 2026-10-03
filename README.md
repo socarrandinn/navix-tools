@@ -56,25 +56,29 @@ Editar `C:\ProgramData\ipswitch\config.json` con un editor abierto como administ
 .\.venv\Scripts\pythonw -m dock
 ```
 
-Barra chica (40 px) pegada al borde de la pantalla, estilo dock de mac/linux, con un ícono por micro-app:
+Gota de vidrio líquido (40 px) pegada al borde izquierdo, derecho o **superior** de la pantalla,
+con un ícono por micro-app:
 
-- Clic en un ícono despliega esa app al lado de la barra; clic de nuevo la cierra; clic en otro ícono cambia de app.
-- Se cierra sola al sacar el mouse, salvo que esté fijada con 📌. ✕ cierra IPDock.
-- Arrastrá la barra (desde el `⋯` o el fondo) para moverla: al soltarla se pega al borde izquierdo o derecho más cercano.
-- Clic derecho en la barra: Fijar panel / Salir.
-- En la app de IP, el botón del modo activo (DHCP o perfil) aparece resaltado.
+- Clic en un ícono despliega esa app hacia adentro de la pantalla; clic de nuevo la cierra; clic en otro ícono cambia de app.
+- Se cierra sola al sacar el mouse, salvo que esté fijada (ícono pin). La X cierra IPDock.
+- Arrastrá la gota desde los puntos de agarre: al soltarla se pega al borde más cercano
+  (en el borde superior la barra es horizontal y la app se abre hacia abajo).
+- Clic derecho: Fijar panel / Salir.
+- Vidrio: blur acrylic de Windows 11 recortado a la forma de gota + reflejos pintados.
+  Con `"backdrop": "none"` usa un vidrio opaco sin blur.
+- Íconos: [Lucide](https://lucide.dev) (ISC), en `dock/assets/icons`.
 
 Apps incluidas:
 
-- 🌐 **Cambio de IP**: DHCP o perfiles de IP fija (requiere `python -m ipswitch install`).
-- 📊 **Uso de IA**: barras 0-100 % de los límites de Claude (5 h y semana) y Codex, con cuándo reinician.
+- **Cambio de IP** (ícono `network`): DHCP o perfiles de IP fija (requiere `python -m ipswitch install`).
+- **Uso de IA** (ícono `gauge`): barras 0-100 % de los límites de Claude (5 h y semana) y Codex, con cuándo reinician.
   - Codex: se lee de `~/.codex/sessions` (el último dato que guardó Codex CLI).
   - Claude: se lee de la status line oficial de Claude Code. Activarlo una vez con
     `.\.venv\Scripts\python -m dock.statusline install` (encadena la status line que ya tenías;
     `uninstall` la restaura). El dato se actualiza mientras usás Claude Code.
 
 Agregar una app: crear `dock/tools/<nombre>.py` con una clase que herede `dock.tool.Tool`
-(`title`, `icon`, `refresh_ms`, `create_widget()`, `refresh()`) y `create_tool()`, y sumar
+(`title`, `icon` = nombre de un SVG en `dock/assets/icons` o 1-2 caracteres, `refresh_ms`, `create_widget()`, `refresh()`) y `create_tool()`, y sumar
 `<nombre>` a `tools` en `dock.json`.
 
 Config en `%APPDATA%\ipdock\dock.json` (se guarda solo al mover o fijar):

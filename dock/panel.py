@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Callable
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
+from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath, QPen, QRegion
 from PySide6.QtWidgets import (
     QApplication,
+    QBoxLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -21,68 +22,97 @@ from PySide6.QtWidgets import (
 
 from .backdrop import apply_backdrop
 from .config import DockConfig
-from .geometry import BAR, GRIP, ICON, ICON_GAP, PANEL_HEIGHT, Rect, bar_height, bar_rect, expanded_rect, snap
+from .geometry import (
+    BAR,
+    FLARE,
+    GRIP,
+    ICON,
+    ICON_GAP,
+    PANEL_HEIGHT,
+    Rect,
+    bar_length,
+    bar_rect,
+    expanded_rect,
+    is_vertical,
+    snap,
+)
+from .glass import droplet_path, paint_glass
+from .icons import svg_icon
 from .registry import LoadedTool
 from .tool import Tool
 
 DRAG_THRESHOLD = 4
+QT_MAX = 16777215
+EXPANDED_RADIUS = 22
 
 STYLE = """
-QWidget { color: #e6edf3; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
-QToolButton#appIcon { border: none; border-radius: 8px; font-size: 13px; font-weight: 600; }
-QToolButton#appIcon:hover { background: rgba(255, 255, 255, 40); }
-QToolButton#appIcon:checked { background: rgba(88, 166, 255, 110); }
+QWidget { color: #f0f4f8; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
+QToolButton#appIcon { border: none; border-radius: 15px; font-size: 14px; font-weight: 600; }
+QToolButton#appIcon:hover { background: rgba(255, 255, 255, 46); }
+QToolButton#appIcon:checked { background: rgba(255, 255, 255, 70); border: 1px solid rgba(255, 255, 255, 120); }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; }
-QPushButton#headerButton { background: transparent; border: none; border-radius: 6px; padding: 2px 6px;
+QPushButton#headerButton { background: transparent; border: none; border-radius: 10px; padding: 2px 7px;
                            font-size: 13px; }
-QPushButton#headerButton:hover { background: rgba(255, 255, 255, 40); }
-QPushButton#headerButton:checked { background: rgba(88, 166, 255, 90); }
-QFrame#card { background: rgba(255, 255, 255, 14); border: 1px solid rgba(255, 255, 255, 24); border-radius: 10px; }
-QLabel#cardError { color: #f85149; }
-QPushButton { background: rgba(255, 255, 255, 30); border: 1px solid rgba(255, 255, 255, 40);
-              border-radius: 8px; padding: 6px 10px; }
-QPushButton:hover { background: rgba(255, 255, 255, 50); }
-QPushButton:disabled { color: #6e7681; }
-QPushButton[active="true"] { background: rgba(88, 166, 255, 70); border-color: #58a6ff; }
-QProgressBar { background: rgba(255, 255, 255, 20); border: none; border-radius: 4px;
-               text-align: center; font-size: 11px; }
-QProgressBar { min-height: 16px; }
-QProgressBar::chunk { background: #3fb950; border-radius: 4px; }
-QProgressBar[level="warn"]::chunk { background: #d29922; }
-QProgressBar[level="high"]::chunk { background: #f85149; }
+QPushButton#headerButton:hover { background: rgba(255, 255, 255, 46); }
+QPushButton#headerButton:checked { background: rgba(255, 255, 255, 80); }
+QFrame#card { background: rgba(255, 255, 255, 16); border: 1px solid rgba(255, 255, 255, 34); border-radius: 14px; }
+QLabel#cardError { color: #ff7b72; }
+QPushButton { background: rgba(255, 255, 255, 34); border: 1px solid rgba(255, 255, 255, 60);
+              border-radius: 12px; padding: 6px 10px; }
+QPushButton:hover { background: rgba(255, 255, 255, 56); }
+QPushButton:disabled { color: #8b949e; }
+QPushButton[active="true"] { background: rgba(120, 190, 255, 90); border-color: rgba(170, 215, 255, 220); }
+QProgressBar { background: rgba(255, 255, 255, 26); border: none; border-radius: 7px;
+               text-align: center; font-size: 11px; min-height: 16px; }
+QProgressBar::chunk { background: rgba(63, 185, 80, 210); border-radius: 7px; }
+QProgressBar[level="warn"]::chunk { background: rgba(210, 153, 34, 220); }
+QProgressBar[level="high"]::chunk { background: rgba(248, 81, 73, 220); }
 """
 
 
 class Grip(QWidget):
-    """Agarre para arrastrar la barra: 2x3 puntos dibujados, cursor de mover.
+    """Agarre para arrastrar la barra: puntos dibujados, cursor de mover.
 
     No consume los clics: el evento sube hasta Panel, que maneja el arrastre.
     """
 
-    COLUMNS, ROWS, SPACING, RADIUS = 2, 3, 5, 1.6
+    SPACING, RADIUS = 5, 1.6
 
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(GRIP)
+        self.vertical = True
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.setToolTip("Arrastrá para mover · clic derecho para el menú")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        self.set_vertical(True)
+
+    def set_vertical(self, vertical: bool) -> None:
+        self.vertical = vertical
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(QT_MAX, QT_MAX)
+        if vertical:
+            self.setFixedSize(ICON, GRIP)
+        else:
+            self.setFixedSize(GRIP, ICON)
+        self.update()
+
+    def _grid(self) -> tuple[int, int]:
+        return (2, 3) if self.vertical else (3, 2)
 
     def dots(self) -> int:
-        return self.COLUMNS * self.ROWS
+        columns, rows = self._grid()
+        return columns * rows
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        hovered = self.underMouse()
-        painter.setBrush(QColor(230, 237, 243) if hovered else QColor(139, 148, 158))
-        width = (self.COLUMNS - 1) * self.SPACING
-        height = (self.ROWS - 1) * self.SPACING
-        left = (self.width() - width) / 2
-        top = (self.height() - height) / 2
-        for column in range(self.COLUMNS):
-            for row in range(self.ROWS):
+        painter.setBrush(QColor(255, 255, 255, 230) if self.underMouse() else QColor(255, 255, 255, 140))
+        columns, rows = self._grid()
+        left = (self.width() - (columns - 1) * self.SPACING) / 2
+        top = (self.height() - (rows - 1) * self.SPACING) / 2
+        for column in range(columns):
+            for row in range(rows):
                 center = QPointF(left + column * self.SPACING, top + row * self.SPACING)
                 painter.drawEllipse(center, self.RADIUS, self.RADIUS)
 
@@ -108,14 +138,17 @@ class Card(QFrame):
 
 
 class Panel(QWidget):
-    """Barra chica pegada a un borde con un ícono por app; clic en un ícono despliega esa app."""
+    """Gota de vidrio pegada a un borde (izquierdo, derecho o superior) con un ícono por app.
+
+    Clic en un ícono despliega esa app hacia adentro de la pantalla.
+    """
 
     def __init__(
         self,
         config: DockConfig,
         loaded: list[LoadedTool],
         screen_area: Callable[[], Rect],
-        animation_ms: int = 180,
+        animation_ms: int = 260,
         hide_delay_ms: int = 700,
         panel_height: int = PANEL_HEIGHT,
         fit_content: bool = True,
@@ -139,12 +172,13 @@ class Panel(QWidget):
         self.dragging = False
         self._press_global: QPoint | None = None
         self._press_offset = QPoint()
+        self._path = QPainterPath()
         self.current: str | None = None
         self.cards: dict[str, Card] = {}
         self.tool_buttons: dict[str, QToolButton] = {}
         self._titles: dict[str, str] = {}
         self.timers: list[QTimer] = []
-        self.bar_h = bar_height(len(loaded))
+        self.bar_len = bar_length(len(loaded))
 
         self.bar = self._build_bar()
         self.flyout = self._build_flyout()
@@ -152,7 +186,7 @@ class Panel(QWidget):
             self._add_tool(item)
         self.bar.layout().addStretch(1)
 
-        root = QHBoxLayout(self)
+        root = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
         root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -163,11 +197,11 @@ class Panel(QWidget):
         self.hide_timer.setInterval(hide_delay_ms)
         self.hide_timer.timeout.connect(self.conceal)
         self.animation = QPropertyAnimation(self, b"geometry", self)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.animation.finished.connect(self._after_animation)
 
         self.flyout.setVisible(False)
         self.setGeometry(QRect(*self._target(False)))
+        self._update_shape()
         if config.pinned and self.cards:
             self.reveal()
 
@@ -175,30 +209,24 @@ class Panel(QWidget):
 
     def _build_bar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedWidth(BAR)
-        layout = QVBoxLayout(bar)
-        layout.setContentsMargins((BAR - ICON) // 2, 0, (BAR - ICON) // 2, 4)
+        layout = QBoxLayout(QBoxLayout.Direction.TopToBottom, bar)
         layout.setSpacing(ICON_GAP)
         self.grip = Grip()
-        layout.addWidget(self.grip)
+        layout.addWidget(self.grip, 0, Qt.AlignmentFlag.AlignCenter)
         return bar
 
     def _build_flyout(self) -> QWidget:
         flyout = QWidget()
-        flyout.setFixedWidth(self.config.width)
         layout = QVBoxLayout(flyout)
-        layout.setContentsMargins(12, 8, 8, 12)
         header = QHBoxLayout()
         self.title = QLabel("")
         self.title.setObjectName("panelTitle")
-        self.pin_button = QPushButton("📌")
-        self.pin_button.setObjectName("headerButton")
+        self.pin_button = self._header_button("pin", "📌")
         self.pin_button.setCheckable(True)
         self.pin_button.setChecked(self.config.pinned)
         self.pin_button.setToolTip("Fijar panel abierto")
         self.pin_button.clicked.connect(self.toggle_pin)
-        self.close_button = QPushButton("✕")
-        self.close_button.setObjectName("headerButton")
+        self.close_button = self._header_button("x", "✕")
         self.close_button.setToolTip("Cerrar IPDock")
         self.close_button.clicked.connect(lambda: self.on_close())
         header.addWidget(self.title)
@@ -210,6 +238,16 @@ class Panel(QWidget):
         self.stack = QStackedWidget()
         layout.addWidget(self.stack)
         return flyout
+
+    @staticmethod
+    def _header_button(icon_name: str, fallback: str) -> QPushButton:
+        icon = svg_icon(icon_name, size=15)
+        button = QPushButton("" if icon else fallback)
+        if icon:
+            button.setIcon(icon)
+            button.setIconSize(QSize(15, 15))
+        button.setObjectName("headerButton")
+        return button
 
     def _add_tool(self, item: LoadedTool) -> None:
         tool = item.tool
@@ -228,13 +266,18 @@ class Panel(QWidget):
         self.stack.addWidget(card)
         button = QToolButton()
         button.setObjectName("appIcon")
-        button.setText(icon)
+        svg = svg_icon(icon, size=18)
+        if svg is not None:
+            button.setIcon(svg)
+            button.setIconSize(QSize(18, 18))
+        else:
+            button.setText(icon)
         button.setToolTip(title)
         button.setCheckable(True)
         button.setFixedSize(ICON, ICON)
         button.clicked.connect(lambda _checked=False, name=item.name: self._icon_clicked(name))
         self.tool_buttons[item.name] = button
-        self.bar.layout().addWidget(button)
+        self.bar.layout().addWidget(button, 0, Qt.AlignmentFlag.AlignCenter)
 
     def _start_refresh(self, tool: Tool, card: Card) -> None:
         self._safe_refresh(tool, card)
@@ -253,11 +296,33 @@ class Panel(QWidget):
             card.show_error(f"Error al refrescar: {exc}")
 
     def _arrange(self) -> None:
-        """La barra queda del lado del borde de la pantalla y la app se abre hacia adentro."""
-        root = self.layout()
+        """Orienta barra y app según el borde: la barra queda pegada al borde y la app hacia adentro."""
+        edge = self.config.edge
+        vertical = is_vertical(edge)
+        root: QBoxLayout = self.layout()
         root.removeWidget(self.bar)
         root.removeWidget(self.flyout)
-        order = (self.flyout, self.bar) if self.config.edge == "right" else (self.bar, self.flyout)
+        bar_layout: QBoxLayout = self.bar.layout()
+        side = (BAR - ICON) // 2
+        for widget in (self.bar, self.flyout):
+            widget.setMinimumSize(0, 0)
+            widget.setMaximumSize(QT_MAX, QT_MAX)
+        if vertical:
+            root.setDirection(QBoxLayout.Direction.LeftToRight)
+            order = (self.flyout, self.bar) if edge == "right" else (self.bar, self.flyout)
+            bar_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+            bar_layout.setContentsMargins(side, FLARE, side, FLARE + 4)
+            self.bar.setFixedWidth(BAR)
+            self.flyout.setFixedWidth(self.config.width)
+            self.flyout.layout().setContentsMargins(14, 8 + FLARE, 10, 12 + FLARE)
+        else:
+            root.setDirection(QBoxLayout.Direction.TopToBottom)
+            order = (self.bar, self.flyout)
+            bar_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+            bar_layout.setContentsMargins(FLARE + 4, side, FLARE, side)
+            self.bar.setFixedHeight(BAR)
+            self.flyout.layout().setContentsMargins(14 + FLARE, 4, 10 + FLARE, 14)
+        self.grip.set_vertical(vertical)
         for widget in order:
             root.addWidget(widget)
 
@@ -301,7 +366,7 @@ class Panel(QWidget):
         self.config = replace(self.config, **changes)
         self.on_config_change(self.config)
 
-    # --- geometría y animación --------------------------------------------------------------
+    # --- geometría, forma y animación -------------------------------------------------------
 
     def _content_height(self) -> int:
         if not self.fit_content or self.current is None:
@@ -318,9 +383,9 @@ class Panel(QWidget):
     def _target(self, revealed: bool) -> Rect:
         area = self._area()
         if revealed:
-            return expanded_rect(area, self.config.edge, self.config.position, self.bar_h,
+            return expanded_rect(area, self.config.edge, self.config.position, self.bar_len,
                                  self.config.width, self._content_height())
-        return bar_rect(area, self.config.edge, self.config.position, self.bar_h)
+        return bar_rect(area, self.config.edge, self.config.position, self.bar_len)
 
     def _move_to(self, revealed: bool) -> None:
         self.revealed = revealed
@@ -328,6 +393,11 @@ class Panel(QWidget):
             self.flyout.setVisible(True)
         target = QRect(*self._target(revealed))
         self.animation.stop()
+        # Al abrir, un rebote leve da la sensación de líquido; al cerrar, se recoge sin rebote.
+        curve = QEasingCurve(QEasingCurve.Type.OutBack if revealed else QEasingCurve.Type.InOutCubic)
+        if revealed:
+            curve.setOvershoot(1.1)
+        self.animation.setEasingCurve(curve)
         if self.animation_ms <= 0 or not self.isVisible():
             self.setGeometry(target)
             self._after_animation()
@@ -340,7 +410,17 @@ class Panel(QWidget):
     def _after_animation(self) -> None:
         if not self.revealed:
             self.flyout.setVisible(False)
+        self._update_shape()
         self.update()
+
+    def _update_shape(self) -> None:
+        radius = EXPANDED_RADIUS if self.revealed else BAR / 2
+        self._path = droplet_path(self.width(), self.height(), self.config.edge, radius, FLARE)
+        self.setMask(QRegion(self._path.toFillPolygon().toPolygon()))
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_shape()
 
     def reposition(self, *_args) -> None:
         self.animation.stop()
@@ -373,7 +453,7 @@ class Panel(QWidget):
         self.dragging = False
         if not was_dragging:
             return
-        edge, position = snap(self._area(), self.x(), self.y(), self.bar_h)
+        edge, position = snap(self._area(), self.x(), self.y(), self.width(), self.height())
         self._save(edge=edge, position=position)
         self._arrange()
         self._move_to(False)
@@ -423,15 +503,16 @@ class Panel(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        alpha = 120 if self.backdrop_active else 235
-        painter.setBrush(QColor(22, 24, 30, alpha))
-        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 10, 10)
+        paint_glass(painter, self._path, self.backdrop_active)
         if self.revealed:
-            x = self.bar.geometry().left() if self.config.edge == "right" else self.bar.geometry().right()
-            painter.setPen(QPen(QColor(255, 255, 255, 30), 1))
-            painter.drawLine(x, 8, x, self.height() - 8)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+            bar = self.bar.geometry()
+            if self.config.edge == "top":
+                painter.drawLine(16, bar.bottom(), self.width() - 16, bar.bottom())
+            else:
+                x = bar.left() if self.config.edge == "right" else bar.right()
+                painter.drawLine(x, 16, x, self.height() - 16)
 
 
 def primary_area() -> Rect:

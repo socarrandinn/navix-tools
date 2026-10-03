@@ -24,7 +24,7 @@ def _now() -> datetime:
 
 class AiUsageTool(Tool):
     title = "Uso de IA"
-    icon = "📊"
+    icon = "gauge"
     refresh_ms = 60_000
 
     def __init__(
@@ -54,7 +54,7 @@ class AiUsageTool(Tool):
             header.setStyleSheet("font-weight: 600; margin-top: 4px;")
             age = QLabel("")
             age.setWordWrap(True)
-            age.setStyleSheet("color: #8b949e; font-size: 11px;")
+            age.setStyleSheet("color: rgba(240, 244, 248, 170); font-size: 11px;")
             grid = QGridLayout()
             grid.setColumnStretch(1, 1)
             layout.addWidget(header)

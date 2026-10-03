@@ -27,7 +27,7 @@ def test_partial_file_uses_defaults(tmp_path):
 @pytest.mark.parametrize(
     "data, fragment",
     [
-        ({"edge": "top"}, "edge"),
+        ({"edge": "bottom"}, "edge"),
         ({"width": 50}, "width"),
         ({"width": "ancho"}, "width"),
         ({"backdrop": "glass"}, "backdrop"),
@@ -68,3 +68,9 @@ def test_integer_position_accepted(tmp_path):
     path = tmp_path / "dock.json"
     path.write_text('{"position": 1}', encoding="utf-8")
     assert load_dock_config(path).position == 1.0
+
+
+def test_top_edge_is_valid(tmp_path):
+    path = tmp_path / "dock.json"
+    path.write_text('{"edge": "top"}', encoding="utf-8")
+    assert load_dock_config(path).edge == "top"

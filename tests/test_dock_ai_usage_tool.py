@@ -39,7 +39,7 @@ def bars(tool, source):
 def test_create_tool():
     tool = create_tool()
     assert isinstance(tool, AiUsageTool)
-    assert tool.icon == "📊"
+    assert tool.icon == "gauge"
     assert tool.title == "Uso de IA"
 
 
