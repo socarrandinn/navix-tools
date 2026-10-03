@@ -87,6 +87,13 @@ QPushButton { background: rgba(255, 255, 255, 34); border: 1px solid rgba(255, 2
               border-radius: @controlpx; padding: 6px 10px; }
 QPushButton:hover { background: rgba(255, 255, 255, 56); }
 QPushButton:disabled { color: #8b949e; }
+QPushButton#optionCard { background: rgba(255, 255, 255, 10); border: 1px solid rgba(255, 255, 255, 26);
+                         border-radius: @controlpx; padding: 0px; text-align: left; }
+QPushButton#optionCard:hover { background: rgba(255, 255, 255, 24); }
+QPushButton#optionCard[active="true"] { background: rgba(88, 166, 255, 60); border-color: rgba(150, 200, 255, 200); }
+QPushButton#optionCard QLabel { background: transparent; }
+QLabel#optionTitle { font-weight: 600; font-size: 13px; }
+QLabel#optionDetail { font-size: 11px; color: rgba(240, 244, 248, 160); }
 QPushButton[active="true"] { background: rgba(120, 190, 255, 90); border-color: rgba(170, 215, 255, 220); }
 QProgressBar { background: rgba(255, 255, 255, 26); border: none; border-radius: 3px; }
 QProgressBar::chunk { background: rgba(63, 185, 80, 210); border-radius: 3px; }

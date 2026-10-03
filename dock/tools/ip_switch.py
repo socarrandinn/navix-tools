@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ipswitch.actions import active_label
@@ -11,6 +11,7 @@ from ipswitch.config import AppConfig, default_config_path, load_config
 from ipswitch.helper import Result
 from ipswitch.status import describe, read_status
 
+from ..icons import svg_icon
 from ..tool import Tool
 from ..worker import RunAsync, run_async
 
@@ -18,6 +19,36 @@ GREEN = "#3fb950"
 BLUE = "#58a6ff"
 GREY = "#8b949e"
 RED = "#f85149"
+
+
+class OptionCard(QPushButton):
+    """Opción de red como tarjeta: ícono, nombre e IP (o "Automática" para DHCP)."""
+
+    def __init__(self, icon: str, title: str, detail: str):
+        super().__init__()
+        self.setObjectName("optionCard")
+        self.setAccessibleName(title)
+        self.setToolTip(f"Cambiar a {title}")
+        self.setMinimumHeight(52)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(10, 8, 10, 8)
+        row.setSpacing(10)
+        self.icon_label = QLabel()
+        svg = svg_icon(icon, color="#c9d1d9", size=18)
+        if svg is not None:
+            self.icon_label.setPixmap(svg.pixmap(QSize(18, 18)))
+        texts = QVBoxLayout()
+        texts.setSpacing(0)
+        self.title = QLabel(title)
+        self.title.setObjectName("optionTitle")
+        self.detail = QLabel(detail)
+        self.detail.setObjectName("optionDetail")
+        texts.addWidget(self.title)
+        texts.addWidget(self.detail)
+        row.addWidget(self.icon_label)
+        row.addLayout(texts, 1)
+        for label in (self.icon_label, self.title, self.detail):
+            label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
 
 class IpSwitchTool(Tool):
@@ -81,7 +112,7 @@ class IpSwitchTool(Tool):
         self.label.setText(active_label(status, config.profiles))
         self.label.setToolTip(describe(status))
         self._set_dot(BLUE if status.dhcp else GREEN)
-        self._build_buttons(tuple(p.name for p in config.profiles))
+        self._build_buttons(tuple(config.profiles))
         active = ("dhcp", None) if status.dhcp else next(
             (("profile", p.name) for p in config.profiles if p.ip == status.ip and p.prefix == status.prefix),
             None,
@@ -95,20 +126,22 @@ class IpSwitchTool(Tool):
         self._set_dot(GREY)
         self._set_message(str(exc), RED)
 
-    def _build_buttons(self, names: tuple[str, ...]) -> None:
-        if names == self._button_names:
+    def _build_buttons(self, profiles: tuple) -> None:
+        if profiles == self._button_names:
             return
         for button in self.buttons:
             self.grid.removeWidget(button)
             button.deleteLater()
         self.buttons = []
         self._button_keys = []
-        self._button_names = names
-        options = [("DHCP", "dhcp", None)] + [(name, "profile", name) for name in names]
-        for index, (text, action, profile) in enumerate(options):
-            button = QPushButton(text)
+        self._button_names = profiles
+        options = [("wifi", "DHCP", "Automática", "dhcp", None)] + [
+            ("network", p.name, f"{p.ip}/{p.prefix}", "profile", p.name) for p in profiles
+        ]
+        for index, (icon, title, detail, action, profile) in enumerate(options):
+            button = OptionCard(icon, title, detail)
             button.clicked.connect(lambda _checked=False, a=action, p=profile: self.switch(a, p))
-            self.grid.addWidget(button, index // 2, index % 2)
+            self.grid.addWidget(button, index, 0)  # una tarjeta por fila: la IP entra completa
             self.buttons.append(button)
             self._button_keys.append((action, profile))
 

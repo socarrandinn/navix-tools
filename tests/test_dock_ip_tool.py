@@ -60,7 +60,7 @@ def test_refresh_shows_active_profile_and_buttons(qtbot):
     assert tool.label.text() == "Fija: Casa"
     assert "192.168.0.100/24" in tool.label.toolTip()
     assert GREEN in tool.dot.styleSheet()
-    assert [b.text() for b in tool.buttons] == ["DHCP", "Casa"]
+    assert [b.accessibleName() for b in tool.buttons] == ["DHCP", "Casa"]
 
 
 def test_dhcp_status_is_blue(qtbot):
@@ -132,7 +132,7 @@ def test_config_error_shows_install_hint(qtbot):
 
 
 def active(tool):
-    return [b.text() for b in tool.buttons if b.property("active")]
+    return [b.accessibleName() for b in tool.buttons if b.property("active")]
 
 
 def test_active_profile_button_is_highlighted(qtbot):
@@ -164,3 +164,15 @@ def test_refreshes_again_after_switch_settles(qtbot):
 
 def test_ip_tool_has_its_own_bar_icon():
     assert IpSwitchTool.icon == "network"
+
+
+def test_options_are_cards_with_icon_name_and_ip(qtbot):
+    from dock.tools.ip_switch import OptionCard
+
+    tool, _ = make(qtbot)
+    tool.refresh()
+    dhcp, casa = tool.buttons
+    assert isinstance(casa, OptionCard)
+    assert (casa.title.text(), casa.detail.text()) == ("Casa", "192.168.0.100/24")
+    assert (dhcp.title.text(), dhcp.detail.text()) == ("DHCP", "Automática")
+    assert not casa.icon_label.pixmap().isNull()
