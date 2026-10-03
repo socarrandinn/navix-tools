@@ -64,6 +64,8 @@ DRAG_THRESHOLD = 4
 QT_MAX = 16777215
 EXPANDED_RADIUS = R_SURFACE
 HEADER_BUTTON = 28  # pin y cerrar: botones de ícono redondos
+APP_ICON = 15       # tamaño del dibujo dentro de cada botón de la barra
+DOT_STEP, DOT_ROW_GAP, DOT_RADIUS = 5.0, 4.0, 1.2
 WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
 HOVER_JIGGLE = 0.4
 DETACH_DISTANCE = 70  # px que hay que tirar hacia adentro para despegar la gota
@@ -137,13 +139,16 @@ class Grip(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(255, 255, 255, 200) if self.underMouse() else QColor(255, 255, 255, 90))
+        # Doble fila de puntos a lo largo del riel (⋮⋮ vertical, ······ en dos filas horizontal).
         long_side = self.height() if self.vertical else self.width()
-        length = max(24.0, long_side * 0.4)
-        if self.vertical:
-            handle = QRectF((self.width() - 4) / 2, (self.height() - length) / 2, 4, length)
-        else:
-            handle = QRectF((self.width() - length) / 2, (self.height() - 4) / 2, length, 4)
-        painter.drawRoundedRect(handle, 2, 2)
+        count = max(3, min(8, int(long_side * 0.4 // DOT_STEP)))
+        span = (count - 1) * DOT_STEP
+        for row in (-DOT_ROW_GAP / 2, DOT_ROW_GAP / 2):
+            for index in range(count):
+                along = (long_side - span) / 2 + index * DOT_STEP
+                across = (self.width() if self.vertical else self.height()) / 2 + row
+                center = QPointF(across, along) if self.vertical else QPointF(along, across)
+                painter.drawEllipse(center, DOT_RADIUS, DOT_RADIUS)
 
 
 class Card(QFrame):
@@ -217,6 +222,7 @@ class Panel(QWidget):
         self._titles: dict[str, str] = {}
         self.timers: list[QTimer] = []
         self.bar_len = bar_length(len(loaded))
+        self._rail_shown = False
 
         self.bar = self._build_bar()
         self.flyout = self._build_flyout()
@@ -226,11 +232,11 @@ class Panel(QWidget):
         self.settings_button = QToolButton()
         self.settings_button.setObjectName("appIcon")
         self.settings_button.setToolTip("Menú")
-        self.settings_button.setFixedSize(24, 24)
-        gear = svg_icon("settings", color="#aab4c0", size=15)
+        self.settings_button.setFixedSize(ICON, ICON)
+        gear = svg_icon("settings", color="#c9d1d9", size=APP_ICON)
         if gear is not None:
             self.settings_button.setIcon(gear)
-            self.settings_button.setIconSize(QSize(15, 15))
+            self.settings_button.setIconSize(QSize(APP_ICON, APP_ICON))
         else:
             self.settings_button.setText("⚙")
         self.settings_button.clicked.connect(self._open_settings_menu)
@@ -314,11 +320,11 @@ class Panel(QWidget):
 
     @staticmethod
     def _header_button(icon_name: str, fallback: str) -> QPushButton:
-        icon = svg_icon(icon_name, size=15)
+        icon = svg_icon(icon_name, size=13)
         button = QPushButton("" if icon else fallback)
         if icon:
             button.setIcon(icon)
-            button.setIconSize(QSize(15, 15))
+            button.setIconSize(QSize(13, 13))
         button.setObjectName("headerButton")
         button.setFixedSize(HEADER_BUTTON, HEADER_BUTTON)
         return button
@@ -340,10 +346,10 @@ class Panel(QWidget):
         self.stack.addWidget(card)
         button = QToolButton()
         button.setObjectName("appIcon")
-        svg = svg_icon(icon, size=18)
+        svg = svg_icon(icon, size=APP_ICON)
         if svg is not None:
             button.setIcon(svg)
-            button.setIconSize(QSize(18, 18))
+            button.setIconSize(QSize(APP_ICON, APP_ICON))
         else:
             button.setText(icon)
         button.setToolTip(title)
@@ -393,8 +399,8 @@ class Panel(QWidget):
             rail_order = (self.icons_box, self.grip) if edge == "right" else (self.grip, self.icons_box)
             icons.setDirection(QBoxLayout.Direction.TopToBottom)
             icons.setContentsMargins(side, FLARE + END_PAD, side, FLARE + END_PAD)
-            self.bar.setFixedSize(BAR, self.bar_len)
-            self.bar_column.setFixedWidth(BAR)
+            self.bar.setFixedSize(self._thickness(), self.bar_len)
+            self.bar_column.setFixedWidth(self._thickness())
             self.flyout.setFixedWidth(self.config.width)
             self.flyout.layout().setContentsMargins(16, 12, 14, 14)
         else:
@@ -405,10 +411,11 @@ class Panel(QWidget):
             rail_order = (self.grip, self.icons_box)
             icons.setDirection(QBoxLayout.Direction.LeftToRight)
             icons.setContentsMargins(FLARE + END_PAD, side, FLARE + END_PAD, side)
-            self.bar.setFixedSize(self.bar_len, BAR)
-            self.bar_column.setFixedHeight(BAR)
+            self.bar.setFixedSize(self.bar_len, self._thickness())
+            self.bar_column.setFixedHeight(self._thickness())
             self.flyout.layout().setContentsMargins(16, 12, 14, 14)
         self.grip.set_vertical(vertical)
+        self.grip.setVisible(self._rail_shown)
         for widget in rail_order:
             outer.addWidget(widget)
         for widget in order:
@@ -426,6 +433,7 @@ class Panel(QWidget):
     def open_tool(self, name: str) -> None:
         self.hide_timer.stop()
         self._cancel_drag()
+        self.set_rail(True)
         self.current = name
         self.stack.setCurrentWidget(self.cards[name])
         self.title.setText(self._titles[name])
@@ -488,6 +496,10 @@ class Panel(QWidget):
     def _bud_finished(self) -> None:
         if not self.revealed and self.bud == 0.0:
             self.flyout.setVisible(False)
+            if not self.underMouse():
+                self._rail_shown = False
+                self.grip.set_shown(False)
+                self._arrange()
             self._set_rect(self._target(False))
         self._refresh_shape()
 
@@ -510,7 +522,7 @@ class Panel(QWidget):
         if revealed:
             return expanded_rect(area, self.config.edge, self.config.position, self.bar_len,
                                  self.config.width, self._content_height())
-        return bar_rect(area, self.config.edge, self.config.position, self.bar_len)
+        return bar_rect(area, self.config.edge, self.config.position, self.bar_len, thickness=self._thickness())
 
     def _set_rect(self, rect: Rect) -> None:
         self.setGeometry(QRect(*rect))
@@ -671,6 +683,7 @@ class Panel(QWidget):
     def begin_drag(self, global_pos: QPoint) -> None:
         if self.revealed:
             return
+        self.set_rail(True)
         self.animation.stop()
         self._press_global = QPoint(global_pos)
         self._press_offset = global_pos - self.pos()
@@ -713,6 +726,20 @@ class Panel(QWidget):
             travel = max(1, aw - 2 * MARGIN - self.bar_len)
             value = (start_x + along - ax - MARGIN) / travel
         return round(max(0.0, min(1.0, value)), 4)
+
+    def _thickness(self) -> int:
+        return BAR if self._rail_shown else BAR - RAIL
+
+    def set_rail(self, shown: bool) -> None:
+        """Muestra el riel de arrastre (barra completa) u oculta y encoge la barra."""
+        if shown == self._rail_shown:
+            return
+        self._rail_shown = shown
+        self.grip.set_shown(shown)
+        self._arrange()
+        if not self.revealed and self._press_global is None and not self.detached:
+            self.animation.stop()
+            self._set_rect(self._target(False))
 
     def _cancel_drag(self) -> None:
         self._press_global = None
@@ -811,14 +838,14 @@ class Panel(QWidget):
 
     def enterEvent(self, event) -> None:
         self.hide_timer.stop()
-        self.grip.set_shown(True)
+        self.set_rail(True)
         if self.wobble_anim.state() != QVariantAnimation.State.Running:
             self.jiggle(HOVER_JIGGLE)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        if self._press_global is None:
-            self.grip.set_shown(False)
+        if self._press_global is None and not self.revealed:
+            self.set_rail(False)
         if self.revealed and not self.config.pinned:
             self.hide_timer.start()
         super().leaveEvent(event)

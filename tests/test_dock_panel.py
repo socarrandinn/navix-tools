@@ -6,7 +6,7 @@ from PySide6.QtGui import QEnterEvent
 from PySide6.QtWidgets import QLabel
 
 from dock.config import DockConfig
-from dock.geometry import BAR, GAP, bar_length, bar_rect, expanded_rect
+from dock.geometry import BAR, GAP, RAIL, bar_length, bar_rect, expanded_rect
 from dock.panel import Panel
 from dock.registry import LoadedTool
 from dock.single import acquire_single_instance
@@ -78,8 +78,8 @@ def leave(panel):
 
 def test_starts_collapsed_as_small_bar_with_one_icon_per_app(qtbot):
     panel, _ = make_panel(qtbot)
-    assert rect(panel) == bar_rect(AREA, "right", 0.5, BAR2)
-    assert rect(panel)[0] + BAR == 1920
+    assert rect(panel) == bar_rect(AREA, "right", 0.5, BAR2, thickness=BAR - RAIL)
+    assert rect(panel)[0] + BAR - RAIL == 1920
     assert panel.revealed is False
     assert panel.flyout.isHidden()
     assert [b.text() for b in panel.tool_buttons.values()] == ["C", "O"]
@@ -103,7 +103,7 @@ def test_click_same_icon_collapses(qtbot):
     panel.tool_buttons["otra"].click()
     panel.tool_buttons["otra"].click()
     assert panel.revealed is False
-    assert rect(panel)[2] == BAR
+    assert rect(panel)[2] == BAR - RAIL
     assert not panel.tool_buttons["otra"].isChecked()
 
 
@@ -185,6 +185,7 @@ def test_drag_bar_to_left_snaps_and_saves(qtbot):
 
 def test_small_move_is_not_a_drag(qtbot):
     panel, state = make_panel(qtbot)
+    enter(panel)
     before = rect(panel)
     panel.begin_drag(QPoint(1890, 500))
     panel.drag_to(QPoint(1892, 501))
@@ -264,7 +265,7 @@ def test_failing_tools_get_error_cards_and_others_work(qtbot):
 
 def test_no_tools_still_shows_bar(qtbot):
     panel, _ = make_panel(qtbot, [])
-    assert rect(panel)[2] == BAR
+    assert rect(panel)[2] == BAR - RAIL
     assert panel.tool_buttons == {}
 
 
@@ -297,6 +298,7 @@ def test_drag_rail_runs_the_full_length_on_the_screen_edge_side(qtbot, edge):
     panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
     panel.show()
     qtbot.waitExposed(panel)
+    enter(panel)
     qtbot.wait(20)
     origin = panel.bar.mapTo(panel, QPoint(0, 0))
     grip = panel.grip.geometry().translated(origin)
@@ -342,7 +344,7 @@ def test_drag_to_top_makes_horizontal_bar_that_opens_down(qtbot):
 
 def test_top_config_starts_horizontal(qtbot):
     panel, _ = make_panel(qtbot, config=DockConfig(edge="top"))
-    assert rect(panel) == bar_rect(AREA, "top", 0.5, BAR2)
+    assert rect(panel) == bar_rect(AREA, "top", 0.5, BAR2, thickness=BAR - RAIL)
 
 
 def test_no_window_mask_so_edges_stay_antialiased(qtbot):
@@ -397,7 +399,7 @@ def test_apply_config_moves_and_resizes_live(qtbot):
 
     panel, _ = make_panel(qtbot)
     panel.apply_config(replace(panel.config, edge="top", width=360))
-    assert rect(panel) == bar_rect(AREA, "top", 0.5, panel.bar_len)
+    assert rect(panel) == bar_rect(AREA, "top", 0.5, panel.bar_len, thickness=BAR - RAIL)
     panel.open_tool("contador")
     assert rect(panel)[2] == 360
 
@@ -489,7 +491,7 @@ def test_bud_animates_open_and_closed(qtbot):
     assert panel.bud < 1.0
     qtbot.waitUntil(lambda: panel.bud == 1.0, timeout=2000)
     panel.conceal()
-    qtbot.waitUntil(lambda: rect(panel)[2] == BAR, timeout=2000)
+    qtbot.waitUntil(lambda: rect(panel)[2] == BAR - RAIL, timeout=2000)
     assert panel.bud == 0.0
 
 
@@ -647,3 +649,16 @@ def test_menu_has_icons_and_hover_style(qtbot):
     style = menu.styleSheet()
     assert "QMenu::item:selected" in style
     assert "border-radius" in style
+
+
+def test_bar_shrinks_while_the_rail_is_hidden(qtbot):
+    from dock.geometry import RAIL
+
+    panel, _ = make_panel(qtbot)
+    assert rect(panel) == bar_rect(AREA, "right", 0.5, BAR2, thickness=BAR - RAIL)
+    enter(panel)
+    assert rect(panel) == bar_rect(AREA, "right", 0.5, BAR2)
+    assert not panel.grip.isHidden()
+    leave(panel)
+    assert rect(panel)[2] == BAR - RAIL
+    assert panel.grip.isHidden()
