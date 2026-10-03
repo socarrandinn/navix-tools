@@ -26,6 +26,7 @@ class Harness:
         self.ip_saved = []
         self.installed = installed
         self.install_calls = []
+        self.tested = []
 
         def default_ip_save(config):
             self.ip_saved.append(config)
@@ -48,13 +49,15 @@ class Harness:
             statusline_install=install,
             statusline_uninstall=uninstall,
             run=run_sync,
+            available_tools=[("ip_switch", "Cambio de IP"), ("ai_usage", "Uso de IA")],
+            test_notification=lambda: self.tested.append(1),
         )
         qtbot.addWidget(self.window)
 
 
-def test_window_has_three_sections(qtbot):
+def test_window_sections(qtbot):
     h = Harness(qtbot)
-    assert h.window.section_names() == ["Planes de IA", "Red (IP)", "Apariencia"]
+    assert h.window.section_names() == ["General", "Planes de IA", "Red (IP)", "Notificaciones", "Apariencia"]
     h.window.show_section("Red (IP)")
     assert h.window.stack.currentWidget() is h.window.network
 
@@ -163,3 +166,46 @@ def test_partial_row_names_the_profile(qtbot):
     qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
     assert h.ip_saved == []
     assert "Oficina" in page.message.text()
+
+
+def test_general_chooses_which_apps_show_in_the_bar(qtbot):
+    h = Harness(qtbot)
+    page = h.window.general
+    assert [box.accessibleName() for box in page.tool_boxes.values()] == ["Cambio de IP", "Uso de IA"]
+    assert all(box.isChecked() for box in page.tool_boxes.values())
+    page.tool_boxes["ai_usage"].setChecked(False)
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.dock_saved[-1].tools == ("ip_switch",)
+
+
+def test_general_requires_at_least_one_app(qtbot):
+    h = Harness(qtbot)
+    page = h.window.general
+    for box in page.tool_boxes.values():
+        box.setChecked(False)
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.dock_saved == []
+    assert "al menos una" in page.message.text()
+
+
+def test_notifications_page(qtbot):
+    h = Harness(qtbot)
+    page = h.window.notifications
+    assert page.enabled.isChecked() and page.threshold.value() == 85
+    page.enabled.setChecked(False)
+    page.threshold.setValue(70)
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert (h.dock_saved[-1].notify, h.dock_saved[-1].notify_threshold) == (False, 70)
+    qtbot.mouseClick(page.test_button, Qt.MouseButton.LeftButton)
+    assert h.tested == [1]
+
+
+def test_switches_are_drawn_toggles(qtbot):
+    from dock.settings import Switch
+
+    h = Harness(qtbot)
+    box = h.window.notifications.enabled
+    assert isinstance(box, Switch)
+    assert (box.sizeHint().width(), box.sizeHint().height()) == (40, 22)
+    qtbot.mouseClick(box, Qt.MouseButton.LeftButton)
+    assert box.isChecked() is False

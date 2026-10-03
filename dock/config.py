@@ -24,6 +24,8 @@ class DockConfig:
     position: float = 0.5
     ai_sources: tuple[str, ...] = AI_SOURCES
     liquid: bool = True
+    notify: bool = True
+    notify_threshold: int = 85
 
 
 def dock_dir() -> Path:
@@ -75,5 +77,12 @@ def load_dock_config(path: Path) -> DockConfig:
     liquid = raw.get("liquid", default.liquid)
     if not isinstance(liquid, bool):
         raise DockConfigError(f"{path}: liquid debe ser true o false")
+    notify = raw.get("notify", default.notify)
+    if not isinstance(notify, bool):
+        raise DockConfigError(f"{path}: notify debe ser true o false")
+    threshold = raw.get("notify_threshold", default.notify_threshold)
+    if isinstance(threshold, bool) or not isinstance(threshold, int) or not 50 <= threshold <= 100:
+        raise DockConfigError(f"{path}: notify_threshold debe ser un entero entre 50 y 100")
     return DockConfig(edge=edge, width=width, tools=tuple(tools), pinned=pinned,
-                      position=float(position), ai_sources=tuple(ai_sources), liquid=liquid)
+                      position=float(position), ai_sources=tuple(ai_sources), liquid=liquid,
+                      notify=notify, notify_threshold=threshold)

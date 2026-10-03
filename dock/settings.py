@@ -1,16 +1,17 @@
-"""Ventana de Configuración: Planes de IA, Red (IP) y Apariencia."""
+"""Ventana de Configuración: General, Planes de IA, Red (IP), Notificaciones y Apariencia."""
 
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Callable
+from typing import Callable, Sequence
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -34,125 +35,245 @@ from .worker import RunAsync, run_async
 
 COLUMNS = ("Nombre", "IP", "Prefijo", "Gateway", "DNS")
 EDGE_LABELS = (("Derecha", "right"), ("Izquierda", "left"), ("Arriba", "top"))
+TOOL_ICONS = {"ip_switch": "network", "ai_usage": "gauge"}
+ACCENT = "#4c8dff"
 
 STYLE = themed("""
-QWidget { background: #161922; color: #e6edf3; font-family: 'Segoe UI'; font-size: 13px; }
-QListWidget { background: #11131a; border: none; padding: 8px; outline: none; }
-QListWidget::item { padding: 10px 12px; border-radius: @controlpx; margin: 2px 0; }
-QListWidget::item:selected { background: #263247; color: #ffffff; }
-QLabel#pageTitle { font-size: 18px; font-weight: 600; }
-QLabel#hint { color: #8b949e; }
-QLabel#message { color: #79c0ff; }
+QWidget { background: #141720; color: #e6edf3; font-family: 'Segoe UI'; font-size: 13px; }
+QWidget#sidebar { background: #10131a; }
+QLabel#sidebarTitle { font-size: 16px; font-weight: 600; background: transparent; }
+QListWidget { background: transparent; border: none; outline: none; }
+QListWidget::item { padding: 9px 12px; border-radius: @controlpx; margin: 1px 0; color: #c9d1d9; }
+QListWidget::item:hover { background: rgba(255, 255, 255, 14); }
+QListWidget::item:selected { background: rgba(76, 141, 255, 38); color: #ffffff; }
+QLabel#pageTitle { font-size: 19px; font-weight: 600; background: transparent; }
+QLabel#hint, QLabel#rowHint { color: #8b949e; background: transparent; }
+QLabel#rowHint { font-size: 12px; }
+QLabel#badge { background: rgba(76, 141, 255, 40); border-radius: 18px; }
+QLabel#message { color: #79c0ff; background: transparent; }
+QFrame#group QLabel#pillOn, QLabel#pillOn { background: rgba(63, 185, 80, 40); color: #56d364; border-radius: @smallpx; padding: 2px 10px; }
+QFrame#group QLabel#pillOff, QLabel#pillOff { background: rgba(139, 148, 158, 40); color: #c9d1d9; border-radius: @smallpx; padding: 2px 10px; }
+QFrame#group { background: #1a1e29; border: 1px solid rgba(255, 255, 255, 18); border-radius: @cardpx; }
+QFrame#group QWidget { background: transparent; }
+QFrame#divider { background: rgba(255, 255, 255, 16); max-height: 1px; border: none; }
 QPushButton { background: #232838; border: 1px solid #343b4f; border-radius: @controlpx; padding: 7px 14px; }
 QPushButton:hover { background: #2c3347; }
 QPushButton:disabled { color: #6e7681; }
-QPushButton#primary { background: #2f6feb; border-color: #4c8dff; color: white; }
+QPushButton#primary { background: #2f6feb; border-color: #4c8dff; color: white; padding: 8px 18px; }
 QPushButton#primary:hover { background: #3b7bf5; }
-QComboBox, QSpinBox { background: #1d2130; border: 1px solid #343b4f; border-radius: @controlpx; padding: 5px 8px; }
-QTableWidget { background: #1a1e2a; border: 1px solid #2b3245; border-radius: @cardpx; gridline-color: #2b3245; }
-QHeaderView::section { background: #1f2433; color: #9da7b3; border: none; padding: 6px; }
-QCheckBox { spacing: 8px; }
-QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #4c566a; border-radius: @smallpx; background: #1d2130; }
+QComboBox, QSpinBox { background: #12151d; border: 1px solid #343b4f; border-radius: @controlpx; padding: 5px 8px; }
+QTableWidget { background: #12151d; border: 1px solid #2b3245; border-radius: @cardpx; gridline-color: #2b3245; }
+QHeaderView::section { background: #1a1e29; color: #9da7b3; border: none; padding: 6px; }
+QCheckBox { spacing: 10px; background: transparent; }
+QCheckBox::indicator { width: 36px; height: 20px; border-radius: @smallpx; background: #2b3245; border: 1px solid #3a4258; }
 QCheckBox::indicator:checked { background: #2f6feb; border-color: #4c8dff; }
 """)
 
 
-def _title(text: str, hint: str) -> list[QWidget]:
-    title = QLabel(text)
-    title.setObjectName("pageTitle")
-    sub = QLabel(hint)
-    sub.setObjectName("hint")
-    sub.setWordWrap(True)
-    return [title, sub]
+# --- piezas de UI reutilizables -----------------------------------------------------------
+
+def _icon_label(name: str, size: int = 18, color: str = "#c9d1d9") -> QLabel:
+    label = QLabel()
+    icon = svg_icon(name, color=color, size=size)
+    if icon is not None:
+        label.setPixmap(icon.pixmap(QSize(size, size)))
+    label.setFixedSize(size + 4, size + 4)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    return label
+
+
+def _header(icon: str, title: str, hint: str) -> QWidget:
+    widget = QWidget()
+    row = QHBoxLayout(widget)
+    row.setContentsMargins(0, 0, 0, 8)
+    row.setSpacing(14)
+    badge = QLabel()
+    badge.setObjectName("badge")
+    badge.setFixedSize(36, 36)
+    badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    svg = svg_icon(icon, color=ACCENT, size=18)
+    if svg is not None:
+        badge.setPixmap(svg.pixmap(QSize(18, 18)))
+    texts = QVBoxLayout()
+    texts.setSpacing(2)
+    title_label = QLabel(title)
+    title_label.setObjectName("pageTitle")
+    hint_label = QLabel(hint)
+    hint_label.setObjectName("hint")
+    hint_label.setWordWrap(True)
+    texts.addWidget(title_label)
+    texts.addWidget(hint_label)
+    row.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+    row.addLayout(texts, 1)
+    return widget
+
+
+def _group() -> tuple[QFrame, QVBoxLayout]:
+    frame = QFrame()
+    frame.setObjectName("group")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(16, 6, 16, 6)
+    layout.setSpacing(0)
+    return frame, layout
+
+
+def _row(group: QVBoxLayout, icon: str, title: str, hint: str, control: QWidget | None) -> None:
+    """Fila de opción: ícono, título (y ayuda) a la izquierda, control a la derecha."""
+    if group.count():
+        divider = QFrame()
+        divider.setObjectName("divider")
+        group.addWidget(divider)
+    widget = QWidget()
+    row = QHBoxLayout(widget)
+    row.setContentsMargins(0, 10, 0, 10)
+    row.setSpacing(12)
+    row.addWidget(_icon_label(icon))
+    texts = QVBoxLayout()
+    texts.setSpacing(1)
+    texts.addWidget(QLabel(title))
+    if hint:
+        hint_label = QLabel(hint)
+        hint_label.setObjectName("rowHint")
+        hint_label.setWordWrap(True)
+        texts.addWidget(hint_label)
+    row.addLayout(texts, 1)
+    if control is not None:
+        row.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
+    group.addWidget(widget)
 
 
 def _button(text: str, icon: str | None = None, primary: bool = False) -> QPushButton:
     button = QPushButton(text)
     if primary:
         button.setObjectName("primary")
-    svg = svg_icon(icon, size=15) if icon else None
+    svg = svg_icon(icon, color="#ffffff" if primary else "#c9d1d9", size=15) if icon else None
     if svg is not None:
         button.setIcon(svg)
         button.setIconSize(QSize(15, 15))
     return button
 
 
-class AppearancePage(QWidget):
-    def __init__(self, window: "SettingsWindow"):
+class Switch(QCheckBox):
+    """Interruptor dibujado: riel redondeado y perilla que se desliza."""
+
+    def sizeHint(self) -> QSize:
+        return QSize(40, 22)
+
+    def hitButton(self, pos) -> bool:
+        return self.rect().contains(pos)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        track = QRectF(1, 1, self.width() - 2, self.height() - 2)
+        painter.setBrush(QColor("#2f6feb") if self.isChecked() else QColor("#2b3245"))
+        painter.drawRoundedRect(track, track.height() / 2, track.height() / 2)
+        knob = track.height() - 6
+        x = track.right() - knob - 3 if self.isChecked() else track.left() + 3
+        painter.setBrush(QColor("#ffffff") if self.isEnabled() else QColor("#8b949e"))
+        painter.drawEllipse(QRectF(x, track.top() + 3, knob, knob))
+
+
+def _switch(checked: bool, name: str = "") -> QCheckBox:
+    box = Switch()
+    box.setFixedSize(40, 22)
+    box.setChecked(checked)
+    box.setAccessibleName(name)
+    return box
+
+
+def _message() -> QLabel:
+    label = QLabel("")
+    label.setObjectName("message")
+    label.setWordWrap(True)
+    return label
+
+
+def _footer(layout: QVBoxLayout, message: QLabel, *buttons: QPushButton) -> None:
+    row = QHBoxLayout()
+    row.addWidget(message, 1)
+    for button in buttons:
+        row.addWidget(button)
+    layout.addLayout(row)
+
+
+class _Page(QWidget):
+    def __init__(self, icon: str, title: str, hint: str):
         super().__init__()
+        self.page_layout = QVBoxLayout(self)
+        self.page_layout.setSpacing(14)
+        self.page_layout.addWidget(_header(icon, title, hint))
+
+
+# --- páginas ------------------------------------------------------------------------------
+
+class GeneralPage(_Page):
+    def __init__(self, window: "SettingsWindow", available: Sequence[tuple[str, str]]):
+        super().__init__("settings", "General", "Qué apps aparecen en la barra.")
         self.window = window
-        layout = QVBoxLayout(self)
-        for widget in _title("Apariencia", "Dónde se pega la gota y cómo se comporta."):
-            layout.addWidget(widget)
-        form = QFormLayout()
-        self.edge = QComboBox()
-        for label, value in EDGE_LABELS:
-            self.edge.addItem(label, value)
-        self.edge.setCurrentIndex(self.edge.findData(window.config.edge))
-        self.width = QSpinBox()
-        self.width.setRange(280, 480)
-        self.width.setSingleStep(10)
-        self.width.setSuffix(" px")
-        self.width.setValue(window.config.width)
-        self.liquid = QCheckBox("Efecto líquido (ondas al abrir y al pasar el mouse)")
-        self.liquid.setChecked(window.config.liquid)
-        form.addRow("Borde de la pantalla", self.edge)
-        form.addRow("Ancho de las apps", self.width)
-        form.addRow("", self.liquid)
-        layout.addLayout(form)
-        layout.addStretch(1)
+        frame, group = _group()
+        self.tool_boxes: dict[str, QCheckBox] = {}
+        for name, title in available:
+            box = _switch(name in window.config.tools, title)
+            self.tool_boxes[name] = box
+            _row(group, TOOL_ICONS.get(name, "settings"), title, "", box)
+        self.page_layout.addWidget(frame)
+        self.page_layout.addStretch(1)
+        self.message = _message()
         self.save_button = _button("Guardar", primary=True)
         self.save_button.clicked.connect(self.save)
-        layout.addWidget(self.save_button, 0, Qt.AlignmentFlag.AlignRight)
+        _footer(self.page_layout, self.message, self.save_button)
 
     def save(self) -> None:
-        self.window.save_dock(edge=self.edge.currentData(), width=self.width.value(),
-                              liquid=self.liquid.isChecked())
+        tools = tuple(name for name, box in self.tool_boxes.items() if box.isChecked())
+        if not tools:
+            self.message.setText("Elegí al menos una app.")
+            return
+        self.window.save_dock(tools=tools)
+        self.message.setText("Guardado.")
 
 
-class AiPage(QWidget):
+class AiPage(_Page):
     def __init__(self, window: "SettingsWindow", installed: Callable[[], bool],
                  install: Callable[[], object], uninstall: Callable[[], object]):
-        super().__init__()
+        super().__init__("bot", "Planes de IA", "Qué planes mostrar en Uso de IA (barras 0-100 %).")
         self.window = window
         self._installed, self._install, self._uninstall = installed, install, uninstall
-        layout = QVBoxLayout(self)
-        for widget in _title("Planes de IA", "Qué planes mostrar en la app Uso de IA (barras 0-100 %)."):
-            layout.addWidget(widget)
         sources = window.config.ai_sources
-        self.claude = QCheckBox("Claude (límites de 5 h y semanal)")
-        self.claude.setChecked("claude" in sources)
-        self.codex = QCheckBox("Codex (último dato guardado por Codex CLI)")
-        self.codex.setChecked("codex" in sources)
-        layout.addWidget(self.claude)
-        layout.addWidget(self.codex)
-        row = QHBoxLayout()
-        self.statusline_label = QLabel("")
-        self.statusline_label.setWordWrap(True)
+        frame, group = _group()
+        self.claude = _switch("claude" in sources, "Claude")
+        self.codex = _switch("codex" in sources, "Codex")
+        _row(group, "bot", "Claude", "Límites de 5 h y semanal, desde la status line oficial.", self.claude)
+        _row(group, "gauge", "Codex", "Último dato guardado por Codex CLI.", self.codex)
+        self.page_layout.addWidget(frame)
+
+        recorder, recorder_group = _group()
+        status = QWidget()
+        status_row = QHBoxLayout(status)
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.setSpacing(8)
+        self.statusline_pill = QLabel("")
         self.statusline_button = _button("")
         self.statusline_button.clicked.connect(self.toggle_statusline)
-        row.addWidget(self.statusline_label, 1)
-        row.addWidget(self.statusline_button)
-        layout.addSpacing(10)
-        layout.addLayout(row)
-        self.message = QLabel("")
-        self.message.setObjectName("message")
-        self.message.setWordWrap(True)
-        layout.addWidget(self.message)
-        layout.addStretch(1)
+        status_row.addWidget(self.statusline_pill)
+        status_row.addWidget(self.statusline_button)
+        _row(recorder_group, "settings", "Registrador de Claude",
+             "Guarda tu uso en cada actualización de la status line; tu status line actual se mantiene.", status)
+        self.page_layout.addWidget(recorder)
+        self.page_layout.addStretch(1)
+        self.message = _message()
         self.save_button = _button("Guardar", primary=True)
         self.save_button.clicked.connect(self.save)
-        layout.addWidget(self.save_button, 0, Qt.AlignmentFlag.AlignRight)
+        _footer(self.page_layout, self.message, self.save_button)
         self._show_statusline()
 
     def _show_statusline(self) -> None:
         active = self._installed()
-        self.statusline_label.setText(
-            "Registrador de Claude: activo. Claude Code guarda tu uso en cada actualización de la status line."
-            if active else
-            "Registrador de Claude: inactivo. Activalo para leer el uso desde la status line oficial "
-            "(tu status line actual se mantiene)."
-        )
+        self.statusline_pill.setText("Activo" if active else "Inactivo")
+        self.statusline_pill.setObjectName("pillOn" if active else "pillOff")
+        self.statusline_pill.style().unpolish(self.statusline_pill)
+        self.statusline_pill.style().polish(self.statusline_pill)
         self.statusline_button.setText("Desactivar" if active else "Activar")
 
     def toggle_statusline(self) -> None:
@@ -168,42 +289,38 @@ class AiPage(QWidget):
         self.message.setText("Guardado.")
 
 
-class NetworkPage(QWidget):
+class NetworkPage(_Page):
     def __init__(self, window: "SettingsWindow", load: Callable[[], AppConfig],
                  adapters: Callable[[], list[str]], save: Callable[[AppConfig], None], run: RunAsync):
-        super().__init__()
+        super().__init__("network", "Red (IP)", "Adaptador y perfiles de IP fija. Guardar pide permiso de "
+                                                "administrador una vez, porque el archivo está protegido.")
         self._load, self._adapters, self._save, self._run = load, adapters, save, run
-        layout = QVBoxLayout(self)
-        for widget in _title("Red (IP)", "Adaptador y perfiles de IP fija. Guardar pide permiso de administrador "
-                                          "una vez, porque el archivo está protegido."):
-            layout.addWidget(widget)
-        form = QFormLayout()
+        frame, group = _group()
         self.adapter = QComboBox()
         self.adapter.setEditable(True)
-        form.addRow("Adaptador", self.adapter)
-        layout.addLayout(form)
+        self.adapter.setMinimumWidth(220)
+        _row(group, "network", "Adaptador", "Interfaz de red que se configura.", self.adapter)
+        self.page_layout.addWidget(frame)
+
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        layout.addWidget(self.table, 1)
-        tools = QHBoxLayout()
+        self.page_layout.addWidget(self.table, 1)
         self.add_button = _button("Agregar", "plus")
         self.add_button.clicked.connect(lambda: self.add_row())
         self.remove_button = _button("Quitar", "trash-2")
         self.remove_button.clicked.connect(self.remove_selected)
-        tools.addWidget(self.add_button)
-        tools.addWidget(self.remove_button)
-        tools.addStretch(1)
         self.save_button = _button("Guardar", primary=True)
         self.save_button.clicked.connect(self.save)
+        self.message = _message()
+        tools = QHBoxLayout()
+        tools.addWidget(self.add_button)
+        tools.addWidget(self.remove_button)
+        tools.addWidget(self.message, 1)
         tools.addWidget(self.save_button)
-        layout.addLayout(tools)
-        self.message = QLabel("")
-        self.message.setObjectName("message")
-        self.message.setWordWrap(True)
-        layout.addWidget(self.message)
+        self.page_layout.addLayout(tools)
         self.reload()
 
     def reload(self) -> None:
@@ -280,6 +397,64 @@ class NetworkPage(QWidget):
         self.message.setText(str(exc))
 
 
+class NotificationsPage(_Page):
+    def __init__(self, window: "SettingsWindow", test: Callable[[], None]):
+        super().__init__("gauge", "Notificaciones", "Aviso de Windows cuando un plan de IA está por agotarse.")
+        self.window = window
+        frame, group = _group()
+        self.enabled = _switch(window.config.notify, "Notificaciones activadas")
+        self.threshold = QSpinBox()
+        self.threshold.setRange(50, 100)
+        self.threshold.setSuffix(" %")
+        self.threshold.setValue(window.config.notify_threshold)
+        _row(group, "settings", "Notificaciones activadas", "", self.enabled)
+        _row(group, "gauge", "Avisar cuando el uso llegue a", "Una vez por ciclo de reinicio de cada plan.",
+             self.threshold)
+        self.page_layout.addWidget(frame)
+        self.page_layout.addStretch(1)
+        self.message = _message()
+        self.test_button = _button("Probar notificación")
+        self.test_button.clicked.connect(lambda: test())
+        self.save_button = _button("Guardar", primary=True)
+        self.save_button.clicked.connect(self.save)
+        _footer(self.page_layout, self.message, self.test_button, self.save_button)
+
+    def save(self) -> None:
+        self.window.save_dock(notify=self.enabled.isChecked(), notify_threshold=self.threshold.value())
+        self.message.setText("Guardado.")
+
+
+class AppearancePage(_Page):
+    def __init__(self, window: "SettingsWindow"):
+        super().__init__("palette", "Apariencia", "Dónde se pega la gota y cómo se comporta.")
+        self.window = window
+        frame, group = _group()
+        self.edge = QComboBox()
+        for label, value in EDGE_LABELS:
+            self.edge.addItem(label, value)
+        self.edge.setCurrentIndex(self.edge.findData(window.config.edge))
+        self.width = QSpinBox()
+        self.width.setRange(280, 480)
+        self.width.setSingleStep(10)
+        self.width.setSuffix(" px")
+        self.width.setValue(window.config.width)
+        self.liquid = _switch(window.config.liquid, "Efecto líquido")
+        _row(group, "palette", "Borde de la pantalla", "Dónde se pega la barra.", self.edge)
+        _row(group, "palette", "Ancho de las apps", "", self.width)
+        _row(group, "palette", "Efecto líquido", "Ondas al abrir y al pasar el mouse.", self.liquid)
+        self.page_layout.addWidget(frame)
+        self.page_layout.addStretch(1)
+        self.message = _message()
+        self.save_button = _button("Guardar", primary=True)
+        self.save_button.clicked.connect(self.save)
+        _footer(self.page_layout, self.message, self.save_button)
+
+    def save(self) -> None:
+        self.window.save_dock(edge=self.edge.currentData(), width=self.width.value(),
+                              liquid=self.liquid.isChecked())
+        self.message.setText("Guardado.")
+
+
 class SettingsWindow(QWidget):
     def __init__(
         self,
@@ -292,35 +467,60 @@ class SettingsWindow(QWidget):
         statusline_install: Callable[[], object],
         statusline_uninstall: Callable[[], object],
         run: RunAsync = run_async,
+        available_tools: Sequence[tuple[str, str]] = (("ip_switch", "Cambio de IP"), ("ai_usage", "Uso de IA")),
+        test_notification: Callable[[], None] = lambda: None,
     ):
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("IPDock · Configuración")
         self.setStyleSheet(STYLE)
-        self.resize(820, 520)
+        self.resize(900, 580)
         self.config = config
         self._on_dock_save = on_dock_save
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
+        sidebar = QWidget()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(220)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(14, 18, 14, 14)
+        side.setSpacing(12)
+        brand = QHBoxLayout()
+        brand.setSpacing(10)
+        brand.addWidget(_icon_label("settings", 20, "#ffffff"))
+        title = QLabel("Configuración")
+        title.setObjectName("sidebarTitle")
+        brand.addWidget(title, 1)
+        side.addLayout(brand)
         self.nav = QListWidget()
-        self.nav.setFixedWidth(190)
+        self.nav.setIconSize(QSize(17, 17))
+        side.addWidget(self.nav, 1)
+
         self.stack = QStackedWidget()
+        self.general = GeneralPage(self, available_tools)
         self.ai = AiPage(self, statusline_installed, statusline_install, statusline_uninstall)
         self.network = NetworkPage(self, ip_load, ip_adapters, ip_save, run)
+        self.notifications = NotificationsPage(self, test_notification)
         self.appearance = AppearancePage(self)
-        self._pages = {"Planes de IA": (self.ai, "bot"), "Red (IP)": (self.network, "network"),
-                       "Apariencia": (self.appearance, "palette")}
+        self._pages = {
+            "General": (self.general, "settings"),
+            "Planes de IA": (self.ai, "bot"),
+            "Red (IP)": (self.network, "network"),
+            "Notificaciones": (self.notifications, "gauge"),
+            "Apariencia": (self.appearance, "palette"),
+        }
         for name, (page, icon) in self._pages.items():
             item = QListWidgetItem(name)
-            svg = svg_icon(icon, size=16)
+            svg = svg_icon(icon, size=17)
             if svg is not None:
                 item.setIcon(svg)
             self.nav.addItem(item)
-            page.layout().setContentsMargins(24, 20, 24, 20)
+            page.layout().setContentsMargins(28, 24, 28, 22)
             self.stack.addWidget(page)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(0)
-        layout.addWidget(self.nav)
+        layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
 
     def section_names(self) -> list[str]:

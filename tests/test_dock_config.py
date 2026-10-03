@@ -99,3 +99,23 @@ def test_invalid_ai_sources_or_liquid(tmp_path, data, fragment):
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(DockConfigError, match=fragment):
         load_dock_config(path)
+
+
+def test_notification_settings(tmp_path):
+    assert DockConfig().notify is True
+    assert DockConfig().notify_threshold == 85
+    path = tmp_path / "dock.json"
+    save_dock_config(path, DockConfig(notify=False, notify_threshold=70))
+    assert load_dock_config(path) == DockConfig(notify=False, notify_threshold=70)
+
+
+@pytest.mark.parametrize("data, fragment", [
+    ({"notify": "si"}, "notify"),
+    ({"notify_threshold": 120}, "notify_threshold"),
+    ({"notify_threshold": "alto"}, "notify_threshold"),
+])
+def test_invalid_notification_settings(tmp_path, data, fragment):
+    path = tmp_path / "dock.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(DockConfigError, match=fragment):
+        load_dock_config(path)

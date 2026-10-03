@@ -84,11 +84,14 @@ Agregar una app: crear `dock/tools/<nombre>.py` con una clase que herede `dock.t
 
 ### Configuración
 
-Engranaje al final de la barra (o clic derecho → Configuración):
+Engranaje de la barra → Configuración (también desde el ícono de la bandeja del sistema):
 
+- **General**: qué apps aparecen en la barra.
 - **Planes de IA**: qué planes mostrar (Claude, Codex) y activar/desactivar el registrador de Claude.
 - **Red (IP)**: adaptador y perfiles de IP fija (agregar, editar, quitar). Guardar pide UAC una vez:
   los perfiles se validan y se escriben en `C:\ProgramData\ipswitch\config.json` con permisos de admin.
+- **Notificaciones**: aviso de Windows cuando un plan llega al umbral (85 % por defecto), una vez por
+  ciclo de reinicio; botón "Probar notificación".
 - **Apariencia**: borde (derecha, izquierda, arriba), ancho de las apps y efecto líquido.
 
 Config en `%APPDATA%\ipdock\dock.json` (se guarda solo al mover o fijar):
