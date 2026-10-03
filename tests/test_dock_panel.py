@@ -6,7 +6,7 @@ from PySide6.QtGui import QEnterEvent
 from PySide6.QtWidgets import QLabel
 
 from dock.config import DockConfig
-from dock.geometry import BAR, bar_length, bar_rect, expanded_rect
+from dock.geometry import BAR, GAP, bar_length, bar_rect, expanded_rect
 from dock.panel import Panel
 from dock.registry import LoadedTool
 from dock.single import acquire_single_instance
@@ -119,11 +119,11 @@ def test_bar_stays_on_screen_edge_side(qtbot):
     right, _ = make_panel(qtbot)
     right.open_tool("contador")
     right.layout().activate()
-    assert right.bar.geometry().x() > right.flyout.geometry().x()
+    assert right.bar_column.geometry().x() > right.flyout.geometry().x()
     left, _ = make_panel(qtbot, config=DockConfig(edge="left"))
     left.open_tool("contador")
     left.layout().activate()
-    assert left.bar.geometry().x() < left.flyout.geometry().x()
+    assert left.bar_column.geometry().x() < left.flyout.geometry().x()
 
 
 def test_leave_collapses_after_delay(qtbot):
@@ -201,7 +201,7 @@ def test_app_opens_inward_after_moving_to_left(qtbot):
     panel.open_tool("contador")
     assert rect(panel)[0] == 0
     panel.layout().activate()
-    assert panel.bar.geometry().x() < panel.flyout.geometry().x()
+    assert panel.bar_column.geometry().x() < panel.flyout.geometry().x()
 
 
 def test_close_button_calls_on_close(qtbot):
@@ -217,7 +217,7 @@ def test_reposition_follows_area_change(qtbot):
     state["area"] = (0, 0, 1280, 720)
     panel.reposition()
     x, y, w, h = rect(panel)
-    assert (x, w) == (1280 - BAR - 320, BAR + 320)
+    assert (x, w) == (1280 - BAR - GAP - 320, BAR + GAP + 320)
     assert y + h <= 720 - 12
 
 
@@ -304,8 +304,8 @@ def test_drag_to_top_makes_horizontal_bar_that_opens_down(qtbot):
     panel.open_tool("contador")
     assert rect(panel)[1] == 0
     panel.layout().activate()
-    assert panel.bar.geometry().y() < panel.flyout.geometry().y()
-    assert panel.bar.geometry().height() == BAR
+    assert panel.bar_column.geometry().y() < panel.flyout.geometry().y()
+    assert panel.bar_column.geometry().height() == BAR
 
 
 def test_top_config_starts_horizontal(qtbot):
@@ -338,17 +338,6 @@ def test_hover_makes_the_droplet_jiggle(qtbot):
     qtbot.waitExposed(panel)
     enter(panel)
     qtbot.waitUntil(lambda: panel.wobble > 0.2, timeout=1000)
-
-
-def test_expand_animation_is_springy(qtbot):
-    from PySide6.QtCore import QEasingCurve
-
-    panel, _ = make_panel(qtbot)
-    panel.animation_ms = 50
-    panel.show()
-    qtbot.waitExposed(panel)
-    panel.open_tool("contador")
-    assert panel.animation.easingCurve().type() == QEasingCurve.Type.OutBack
 
 
 def test_svg_icon_names_render_as_icons(qtbot):
@@ -419,3 +408,92 @@ def test_content_has_breathing_room_from_droplet_edges(qtbot, edge):
     assert (BAR - ICON) // 2 >= 7
     card = panel.cards["contador"].layout().contentsMargins()
     assert min(card.left(), card.top(), card.right(), card.bottom()) >= 14
+
+
+def gap_point(panel):
+    """Punto en el hueco entre la barra y la app, a la altura del centro de la barra."""
+    bar = panel.bar_shape_rect()
+    flyout = panel.flyout.geometry()
+    return QPoint(round((bar.left() + flyout.right()) / 2), round(bar.center().y()))
+
+
+def test_open_buds_a_separate_drop(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.open_tool("contador")
+    assert panel.bud == 1.0
+    flyout = panel.flyout.geometry()
+    assert panel.shape().contains(QPointF(flyout.center()))
+    assert not panel.shape().contains(QPointF(gap_point(panel)))
+    assert panel.flyout_opacity() == 1.0
+
+
+def test_half_open_drop_is_still_joined_by_a_neck(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.open_tool("contador")
+    panel.set_bud(0.4)
+    assert panel.shape().contains(QPointF(gap_point(panel)))
+    assert panel.flyout_opacity() == 0.0
+
+
+def test_bar_keeps_its_size_and_place_when_open(qtbot):
+    panel, _ = make_panel(qtbot)
+    collapsed = bar_rect(AREA, "right", 0.5, BAR2)
+    panel.open_tool("contador")
+    bar = panel.bar_shape_rect()
+    assert (round(bar.width()), round(bar.height())) == (BAR, BAR2)
+    assert round(bar.top()) + rect(panel)[1] == collapsed[1]
+
+
+def test_bud_animates_open_and_closed(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.animation_ms = 60
+    panel.show()
+    qtbot.waitExposed(panel)
+    panel.open_tool("contador")
+    assert panel.bud < 1.0
+    qtbot.waitUntil(lambda: panel.bud == 1.0, timeout=2000)
+    panel.conceal()
+    qtbot.waitUntil(lambda: rect(panel)[2] == BAR, timeout=2000)
+    assert panel.bud == 0.0
+
+
+def bar_center(panel):
+    x, y, w, h = rect(panel)
+    return QPoint(x + w // 2, y + h // 2)
+
+
+def test_small_pull_stretches_but_stays_stuck(qtbot):
+    panel, state = make_panel(qtbot)
+    start = bar_center(panel)
+    panel.begin_drag(start)
+    panel.drag_to(start - QPoint(40, 0))
+    assert panel.dragging and not panel.detached
+    x, y, w, h = rect(panel)
+    assert w > BAR and x + w == 1920
+    assert panel.shape().contains(QPointF(w - 1, h / 2))
+    panel.end_drag(start - QPoint(40, 0))
+    assert rect(panel) == bar_rect(AREA, "right", 0.5, BAR2)
+    assert panel.config.edge == "right"
+
+
+def test_pull_past_threshold_detaches_into_a_free_drop(qtbot):
+    panel, _ = make_panel(qtbot)
+    start = bar_center(panel)
+    panel.begin_drag(start)
+    panel.drag_to(start - QPoint(150, 0))
+    assert panel.detached
+    x, y, w, h = rect(panel)
+    assert (w, h) == (BAR, BAR2)
+    assert x + w < 1920
+    assert not panel.shape().contains(QPointF(0.5, 0.5))
+
+
+def test_sliding_along_the_edge_does_not_detach(qtbot):
+    panel, state = make_panel(qtbot)
+    start = bar_center(panel)
+    panel.begin_drag(start)
+    panel.drag_to(start + QPoint(0, 200))
+    assert not panel.detached
+    panel.end_drag(start + QPoint(0, 200))
+    assert state["saved"][-1].edge == "right"
+    assert state["saved"][-1].position > 0.5

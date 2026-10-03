@@ -10,6 +10,7 @@ BAR_PADDING = 12
 SETTINGS_SLOT = 24  # engranaje de configuración al final de la barra
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
 MARGIN = 12       # separación mínima a lo largo del borde
+GAP = 10          # espacio entre la barra y la gota de la app ya separada
 PANEL_HEIGHT = 420
 EDGES = ("left", "right", "top")
 
@@ -49,12 +50,12 @@ def expanded_rect(area: Rect, edge: str, position: float, length: int, flyout_wi
     if is_vertical(edge):
         height = min(max(length, content_height), ah - 2 * margin)
         y = round(_clamp(by, ay + margin, ay + ah - margin - height))
-        width = BAR + flyout_width
+        width = BAR + GAP + flyout_width
         x = ax + aw - width if edge == "right" else ax
         return x, y, width, height
     width = min(max(length, flyout_width), aw - 2 * margin)
     x = round(_clamp(bx, ax + margin, ax + aw - margin - width))
-    height = min(BAR + content_height, ah - margin)
+    height = min(BAR + GAP + content_height, ah - margin)
     return x, ay, width, height
 
 
@@ -70,3 +71,15 @@ def snap(area: Rect, x: int, y: int, width: int, height: int, margin: int = MARG
         return edge, round(_clamp((cy - length / 2 - ay - margin) / travel, 0.0, 1.0), 4)
     travel = max(1, aw - 2 * margin - length)
     return edge, round(_clamp((cx - length / 2 - ax - margin) / travel, 0.0, 1.0), 4)
+
+
+def stretched_rect(area: Rect, edge: str, position: float, length: int, pull: float,
+                   margin: int = MARGIN) -> Rect:
+    """Barra estirada hacia adentro mientras se la arrastra, todavía pegada al borde."""
+    x, y, w, h = bar_rect(area, edge, position, length, margin=margin)
+    pull = max(0, round(pull))
+    if edge == "right":
+        return x - pull, y, w + pull, h
+    if edge == "left":
+        return x, y, w + pull, h
+    return x, y, w, h + pull

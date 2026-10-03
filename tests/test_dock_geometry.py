@@ -1,6 +1,6 @@
 import pytest
 
-from dock.geometry import BAR, FLARE, bar_length, bar_rect, expanded_rect, snap
+from dock.geometry import BAR, FLARE, GAP, bar_length, bar_rect, expanded_rect, snap
 
 AREA = (0, 0, 1920, 1040)
 L = 80
@@ -25,13 +25,13 @@ def test_top_bar_is_horizontal_and_touches_top():
 
 
 def test_expanded_vertical_grows_inward_from_the_edge():
-    assert expanded_rect(AREA, "right", 0.5, L, 320, 200) == (1920 - BAR - 320, 480, BAR + 320, 200)
-    assert expanded_rect(AREA, "left", 0.5, L, 320, 200) == (0, 480, BAR + 320, 200)
+    assert expanded_rect(AREA, "right", 0.5, L, 320, 200) == (1920 - BAR - GAP - 320, 480, BAR + GAP + 320, 200)
+    assert expanded_rect(AREA, "left", 0.5, L, 320, 200) == (0, 480, BAR + GAP + 320, 200)
     assert expanded_rect(AREA, "right", 0.5, L, 320, 10)[3] == L
 
 
 def test_expanded_top_grows_down():
-    assert expanded_rect(AREA, "top", 0.5, L, 320, 200) == (920, 0, 320, BAR + 200)
+    assert expanded_rect(AREA, "top", 0.5, L, 320, 200) == (920, 0, 320, BAR + GAP + 200)
     assert expanded_rect(AREA, "top", 1.0, L, 320, 200)[0] == 1920 - 12 - 320
 
 

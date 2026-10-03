@@ -64,7 +64,9 @@ con un ícono por micro-app:
 - Arrastrá la gota desde los puntos de agarre: al soltarla se pega al borde más cercano
   (en el borde superior la barra es horizontal y la app se abre hacia abajo).
 - Clic derecho: Fijar panel / Salir.
-- Efecto líquido: al abrir, cerrar o pasar el mouse la gota ondula y vuelve a su forma.
+- Efecto líquido: al abrir una app, brota de la barra como una gota que se separa (y se reabsorbe al
+  cerrar); al tirar de la barra se estira como líquido y, pasados ~70 px, se despega del borde;
+  al pasar el mouse la gota ondula.
 - Íconos: [Lucide](https://lucide.dev) (ISC), en `dock/assets/icons`.
 
 Apps incluidas:

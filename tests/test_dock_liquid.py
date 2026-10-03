@@ -2,7 +2,9 @@ import pytest
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import QColor, QImage, QPainter
 
-from dock.liquid import droplet_path, paint_liquid
+from PySide6.QtCore import QRectF
+
+from dock.liquid import bridge_path, droplet_path, paint_liquid
 
 F = 8
 
@@ -59,3 +61,22 @@ def test_paint_liquid_is_solid_and_dark_inside_only(qapp):
     assert center.alpha() >= 240
     assert center.lightness() < 70
     assert image.pixelColor(1, 2).alpha() == 0
+
+
+def test_bridge_connects_side_by_side_drops(qapp):
+    left, right = QRectF(0, 0, 100, 200), QRectF(112, 60, 40, 80)
+    neck = bridge_path(left, right, horizontal=True, thickness=30)
+    assert inside(neck, 106, 100)
+    assert not inside(neck, 106, 40)
+
+
+def test_thin_bridge_has_broken(qapp):
+    left, right = QRectF(0, 0, 100, 200), QRectF(112, 60, 40, 80)
+    assert bridge_path(left, right, horizontal=True, thickness=0).isEmpty()
+
+
+def test_vertical_bridge_for_top_edge(qapp):
+    top, bottom = QRectF(60, 0, 80, 40), QRectF(0, 52, 200, 100)
+    neck = bridge_path(top, bottom, horizontal=False, thickness=30)
+    assert inside(neck, 100, 46)
+    assert not inside(neck, 20, 46)
