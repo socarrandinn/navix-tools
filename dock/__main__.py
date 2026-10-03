@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+import sys
+
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
+
+from .config import DockConfigError, dock_dir, load_dock_config
+from .panel import Panel, primary_area
+from .registry import load_tools
+from .single import acquire_single_instance
+
+INSTANCE_NAME = "ipdock-single-instance"
+
+
+def main(argv: list[str] | None = None) -> int:
+    app = QApplication(sys.argv[:1])
+    server = acquire_single_instance(INSTANCE_NAME)
+    if server is None:
+        return 0
+    try:
+        config = load_dock_config(dock_dir() / "dock.json")
+    except DockConfigError as exc:
+        QMessageBox.critical(None, "IPDock", str(exc))
+        return 1
+    panel = Panel(config, load_tools(config.tools), primary_area)
+    QGuiApplication.primaryScreen().availableGeometryChanged.connect(panel.reposition)
+    panel.show()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
