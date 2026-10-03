@@ -2,11 +2,11 @@ from __future__ import annotations
 
 Rect = tuple[int, int, int, int]
 
-BAR = 40          # grosor de la barra de apps
+BAR = 44          # grosor de la barra de apps
 GRIP = 20         # zona de agarre para arrastrar
 ICON = 30         # botón de cada app
 ICON_GAP = 4
-BAR_PADDING = 8
+BAR_PADDING = 12
 SETTINGS_SLOT = 24  # engranaje de configuración al final de la barra
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
 MARGIN = 12       # separación mínima a lo largo del borde

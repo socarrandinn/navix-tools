@@ -1,3 +1,4 @@
+import pytest
 import uuid
 
 from PySide6.QtCore import QEvent, QPoint, QPointF
@@ -405,3 +406,16 @@ def test_turning_liquid_off_stops_the_wave(qtbot):
     assert panel.wobble == 0.0
     qtbot.wait(50)
     assert panel.wobble == 0.0
+
+
+@pytest.mark.parametrize("edge", ["right", "left", "top"])
+def test_content_has_breathing_room_from_droplet_edges(qtbot, edge):
+    from dock.geometry import ICON
+
+    panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
+    flyout = panel.flyout.layout().contentsMargins()
+    assert min(flyout.left(), flyout.right()) >= 20
+    assert min(flyout.top(), flyout.bottom()) >= 16
+    assert (BAR - ICON) // 2 >= 7
+    card = panel.cards["contador"].layout().contentsMargins()
+    assert min(card.left(), card.top(), card.right(), card.bottom()) >= 14
