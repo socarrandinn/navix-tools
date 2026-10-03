@@ -7,34 +7,33 @@ from dataclasses import replace
 from typing import Callable, Sequence
 
 from PySide6.QtCore import QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QIcon, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from ipswitch.config import AppConfig, ConfigError, parse_config
+from ipswitch.models import ProfileError, StaticProfile
 
 from .config import DockConfig
-from .icons import svg_icon
+from .icons import ICON_DIR, svg_icon
 from .theme import themed
 from .worker import RunAsync, run_async
 
-COLUMNS = ("Nombre", "IP", "Prefijo", "Gateway", "DNS")
 EDGE_LABELS = (("Derecha", "right"), ("Izquierda", "left"), ("Arriba", "top"))
 TOOL_ICONS = {"ip_switch": "network", "ai_usage": "gauge"}
 ACCENT = "#4c8dff"
@@ -62,13 +61,31 @@ QPushButton:hover { background: #2c3347; }
 QPushButton:disabled { color: #6e7681; }
 QPushButton#primary { background: #2f6feb; border-color: #4c8dff; color: white; padding: 8px 18px; }
 QPushButton#primary:hover { background: #3b7bf5; }
-QComboBox, QSpinBox { background: #12151d; border: 1px solid #343b4f; border-radius: @controlpx; padding: 5px 8px; }
-QTableWidget { background: #12151d; border: 1px solid #2b3245; border-radius: @cardpx; gridline-color: #2b3245; }
-QHeaderView::section { background: #1a1e29; color: #9da7b3; border: none; padding: 6px; }
+QComboBox, QSpinBox, QLineEdit { background: #12151d; border: 1px solid #343b4f; border-radius: @controlpx;
+                                 padding: 6px 10px; selection-background-color: #2f6feb; }
+QComboBox:hover, QSpinBox:hover, QLineEdit:hover { border-color: #4a5470; }
+QComboBox:focus, QSpinBox:focus, QLineEdit:focus { border-color: #4c8dff; }
+QComboBox::drop-down { border: none; width: 28px; }
+QComboBox::down-arrow { image: url(@chevron); width: 14px; height: 14px; }
+QComboBox QAbstractItemView { background: #1a1e29; border: 1px solid #343b4f; border-radius: @controlpx;
+                              padding: 4px; outline: none; selection-background-color: rgba(76, 141, 255, 60); }
+QComboBox QAbstractItemView::item { min-height: 30px; padding: 4px 8px; border-radius: @smallpx; }
+QComboBox QAbstractItemView::item:hover { background: rgba(255, 255, 255, 18); }
+QFrame#profileCard { background: #1a1e29; border: 1px solid rgba(255, 255, 255, 18); border-radius: @cardpx; }
+QFrame#profileCard:hover { border-color: rgba(76, 141, 255, 120); }
+QFrame#profileCard QWidget, QFrame#profileCard QLabel { background: transparent; }
+QFrame#profileCard QLabel#badge { background: rgba(76, 141, 255, 40); border-radius: 17px; }
+QLabel#cardName { font-weight: 600; }
+QLabel#sectionTitle { font-size: 14px; font-weight: 600; background: transparent; }
+QLabel#error { color: #ff7b72; background: transparent; }
+QPushButton#ghost { background: transparent; border: none; border-radius: 16px; padding: 0px; }
+QPushButton#ghost:hover { background: rgba(255, 255, 255, 30); }
+QScrollArea { background: transparent; border: none; }
+QScrollArea > QWidget > QWidget { background: transparent; }
 QCheckBox { spacing: 10px; background: transparent; }
 QCheckBox::indicator { width: 36px; height: 20px; border-radius: @smallpx; background: #2b3245; border: 1px solid #3a4258; }
 QCheckBox::indicator:checked { background: #2f6feb; border-color: #4c8dff; }
-""")
+""").replace("@chevron", (ICON_DIR / "chevron-down-light.svg").as_posix())
 
 
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20
@@ -306,38 +323,175 @@ class AiPage(_Page):
         self.message.setText("Guardado.")
 
 
+class ProfileEditor(QDialog):
+    """Ventana para crear o editar un perfil de IP fija; valida antes de aceptar."""
+
+    def __init__(self, profile: StaticProfile | None, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle("Editar perfil" if profile else "Nuevo perfil")
+        self.setStyleSheet(STYLE)
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(14)
+        layout.addWidget(_header("network", "Editar perfil" if profile else "Nuevo perfil",
+                                 "IP fija que se aplica al adaptador elegido."))
+        frame, group = _group()
+        self.name = QLineEdit(profile.name if profile else "")
+        self.name.setPlaceholderText("Casa, Oficina…")
+        self.ip = QLineEdit(profile.ip if profile else "")
+        self.ip.setPlaceholderText("192.168.0.100")
+        self.prefix = QSpinBox()
+        self.prefix.setRange(1, 30)
+        self.prefix.setPrefix("/")
+        self.prefix.setValue(profile.prefix if profile else 24)
+        self.gateway = QLineEdit(profile.gateway if profile else "")
+        self.gateway.setPlaceholderText("192.168.0.1")
+        dns = list(profile.dns) if profile else []
+        self.dns1 = QLineEdit(dns[0] if dns else "")
+        self.dns1.setPlaceholderText("8.8.8.8")
+        self.dns2 = QLineEdit(dns[1] if len(dns) > 1 else "")
+        self.dns2.setPlaceholderText("opcional")
+        for field in (self.name, self.ip, self.gateway, self.dns1, self.dns2):
+            field.setMinimumWidth(200)
+        _row(group, "pencil", "Nombre", "", self.name)
+        _row(group, "network", "Dirección IP", "", self.ip)
+        _row(group, "network", "Prefijo", "24 = máscara 255.255.255.0", self.prefix)
+        _row(group, "network", "Puerta de enlace", "", self.gateway)
+        _row(group, "network", "DNS primario", "", self.dns1)
+        _row(group, "network", "DNS secundario", "", self.dns2)
+        layout.addWidget(frame)
+        self.error = QLabel("")
+        self.error.setObjectName("error")
+        self.error.setWordWrap(True)
+        cancel = _button("Cancelar")
+        cancel.clicked.connect(self.reject)
+        accept = _button("Aceptar", primary=True)
+        accept.clicked.connect(self.try_accept)
+        _footer(layout, self.error, cancel, accept)
+
+    def profile(self) -> StaticProfile:
+        dns = tuple(d for d in (self.dns1.text().strip(), self.dns2.text().strip()) if d)
+        return StaticProfile(self.name.text().strip(), self.ip.text().strip(), self.prefix.value(),
+                             self.gateway.text().strip(), dns)
+
+    def try_accept(self) -> bool:
+        try:
+            self.profile().validate()
+        except ProfileError as exc:
+            self.error.setText(str(exc))
+            return False
+        self.accept()
+        return True
+
+    showEvent = None  # se reemplaza abajo para la barra de título oscura
+
+
+def _editor_showevent(self, event) -> None:
+    QDialog.showEvent(self, event)
+    dark_title_bar(int(self.winId()))
+
+
+ProfileEditor.showEvent = _editor_showevent
+
+
+def edit_profile(profile: StaticProfile | None, parent: QWidget | None) -> StaticProfile | None:
+    editor = ProfileEditor(profile, parent)
+    return editor.profile() if editor.exec() == QDialog.DialogCode.Accepted else None
+
+
+class ProfileCard(QFrame):
+    """Tarjeta de un perfil: ícono, nombre, IP/prefijo, gateway y DNS, con editar y borrar."""
+
+    def __init__(self, profile: StaticProfile):
+        super().__init__()
+        self.setObjectName("profileCard")
+        self.profile = profile
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 12, 10, 12)
+        row.setSpacing(12)
+        badge = QLabel()
+        badge.setObjectName("badge")
+        badge.setFixedSize(34, 34)
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        svg = svg_icon("network", color=ACCENT, size=16)
+        if svg is not None:
+            badge.setPixmap(svg.pixmap(QSize(16, 16)))
+        row.addWidget(badge)
+        texts = QVBoxLayout()
+        texts.setSpacing(2)
+        name = QLabel(profile.name)
+        name.setObjectName("cardName")
+        detail = QLabel(self._detail())
+        detail.setObjectName("rowHint")
+        texts.addWidget(name)
+        texts.addWidget(detail)
+        row.addLayout(texts, 1)
+        self.edit_button = self._ghost("pencil", "Editar")
+        self.remove_button = self._ghost("trash-2", "Quitar")
+        row.addWidget(self.edit_button)
+        row.addWidget(self.remove_button)
+
+    def _detail(self) -> str:
+        dns = ", ".join(self.profile.dns) if self.profile.dns else "sin DNS"
+        return f"{self.profile.ip}/{self.profile.prefix} · gateway {self.profile.gateway} · DNS {dns}"
+
+    def summary(self) -> str:
+        return f"{self.profile.name} {self._detail()}"
+
+    @staticmethod
+    def _ghost(icon: str, tooltip: str) -> QPushButton:
+        button = QPushButton("")
+        button.setObjectName("ghost")
+        button.setToolTip(tooltip)
+        button.setFixedSize(32, 32)
+        svg = svg_icon(icon, color="#c9d1d9", size=15)
+        if svg is not None:
+            button.setIcon(svg)
+            button.setIconSize(QSize(15, 15))
+        return button
+
+
 class NetworkPage(_Page):
     def __init__(self, window: "SettingsWindow", load: Callable[[], AppConfig],
                  adapters: Callable[[], list[str]], save: Callable[[AppConfig], None], run: RunAsync):
         super().__init__("network", "Red (IP)", "Adaptador y perfiles de IP fija. Guardar pide permiso de "
                                                 "administrador una vez, porque el archivo está protegido.")
         self._load, self._adapters, self._save, self._run = load, adapters, save, run
+        self.editor: Callable[[StaticProfile | None, QWidget], StaticProfile | None] = edit_profile
+        self.profiles: list[StaticProfile] = []
+        self.cards: list[ProfileCard] = []
         frame, group = _group()
         self.adapter = QComboBox()
-        self.adapter.setEditable(True)
-        self.adapter.setMinimumWidth(220)
+        self.adapter.setEditable(False)
+        self.adapter.setMinimumWidth(240)
+        self.adapter.view().setObjectName("adapterList")
         _row(group, "network", "Adaptador", "Interfaz de red que se configura.", self.adapter)
         self.page_layout.addWidget(frame)
 
-        self.table = QTableWidget(0, len(COLUMNS))
-        self.table.setHorizontalHeaderLabels(COLUMNS)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.page_layout.addWidget(self.table, 1)
-        self.add_button = _button("Agregar", "plus")
-        self.add_button.clicked.connect(lambda: self.add_row())
-        self.remove_button = _button("Quitar", "trash-2")
-        self.remove_button.clicked.connect(self.remove_selected)
-        self.save_button = _button("Guardar", primary=True)
-        self.save_button.clicked.connect(self.save)
+        title_row = QHBoxLayout()
+        title = QLabel("Perfiles de IP fija")
+        title.setObjectName("sectionTitle")
+        self.add_button = _button("Agregar perfil", "plus")
+        self.add_button.clicked.connect(lambda: self._edit(None))
+        title_row.addWidget(title, 1)
+        title_row.addWidget(self.add_button)
+        self.page_layout.addLayout(title_row)
+
+        self.cards_box = QVBoxLayout()
+        self.cards_box.setSpacing(8)
+        holder = QWidget()
+        holder.setLayout(self.cards_box)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(holder)
+        self.page_layout.addWidget(scroll, 1)
+
         self.message = _message()
-        tools = QHBoxLayout()
-        tools.addWidget(self.add_button)
-        tools.addWidget(self.remove_button)
-        tools.addWidget(self.message, 1)
-        tools.addWidget(self.save_button)
-        self.page_layout.addLayout(tools)
+        self.save_button = _button("Guardar", "check", primary=True)
+        self.save_button.clicked.connect(self.save)
+        _footer(self.page_layout, self.message, self.save_button)
         self.reload()
 
     def reload(self) -> None:
@@ -356,44 +510,54 @@ class NetworkPage(_Page):
         config, adapters = value
         self.adapter.clear()
         for name in [config.adapter] + [a for a in adapters if a != config.adapter]:
-            self.adapter.addItem(name)
-        self.table.setRowCount(0)
-        for profile in config.profiles:
-            self.add_row([profile.name, profile.ip, str(profile.prefix), profile.gateway, ", ".join(profile.dns)])
+            self.adapter.addItem(svg_icon("network", size=15) or QIcon(), name)
+        self.profiles = list(config.profiles)
+        self._render()
         self.save_button.setEnabled(True)
 
     def _load_failed(self, exc: Exception) -> None:
         self.message.setText(str(exc))
         self.save_button.setEnabled(False)
 
-    def add_row(self, values: list[str] | None = None) -> None:
-        row = self.table.rowCount()
-        self.table.insertRow(row)
-        for column in range(len(COLUMNS)):
-            text = values[column] if values else ""
-            self.table.setItem(row, column, QTableWidgetItem(text))
+    def _render(self) -> None:
+        for card in self.cards:
+            self.cards_box.removeWidget(card)
+            card.deleteLater()
+        self.cards = []
+        while self.cards_box.count():
+            self.cards_box.takeAt(0)
+        for index, profile in enumerate(self.profiles):
+            card = ProfileCard(profile)
+            card.edit_button.clicked.connect(lambda _=False, i=index: self._edit(i))
+            card.remove_button.clicked.connect(lambda _=False, i=index: self._remove(i))
+            self.cards_box.addWidget(card)
+            self.cards.append(card)
+        if not self.profiles:
+            empty = QLabel("Sin perfiles. Agregá uno para poder cambiar a IP fija.")
+            empty.setObjectName("hint")
+            self.cards_box.addWidget(empty)
+        self.cards_box.addStretch(1)
 
-    def remove_selected(self) -> None:
-        for row in sorted({index.row() for index in self.table.selectedIndexes()}, reverse=True):
-            self.table.removeRow(row)
+    def _edit(self, index: int | None) -> None:
+        current = self.profiles[index] if index is not None else None
+        result = self.editor(current, self)
+        if result is None:
+            return
+        if index is None:
+            self.profiles.append(result)
+        else:
+            self.profiles[index] = result
+        self._render()
+
+    def _remove(self, index: int) -> None:
+        del self.profiles[index]
+        self._render()
 
     def collect(self) -> AppConfig:
-        def cell(row: int, column: int) -> str:
-            item = self.table.item(row, column)
-            return item.text().strip() if item else ""
-
-        profiles = []
-        for row in range(self.table.rowCount()):
-            values = [cell(row, column) for column in range(len(COLUMNS))]
-            if not any(values):
-                continue  # fila vacía (por ejemplo, recién agregada): se ignora
-            name, ip, prefix, gateway, dns = values
-            if not (name and ip and prefix and gateway):
-                label = name or f"fila {row + 1}"
-                raise ConfigError(f"Perfil {label}: completá nombre, IP, prefijo y gateway.")
-            profiles.append({"name": name, "ip": ip, "prefix": prefix, "gateway": gateway,
-                             "dns": [d.strip() for d in dns.split(",") if d.strip()]})
-        return parse_config({"adapter": self.adapter.currentText().strip(), "profiles": profiles}, "perfiles")
+        raw = {"adapter": self.adapter.currentText().strip(),
+               "profiles": [{"name": p.name, "ip": p.ip, "prefix": p.prefix, "gateway": p.gateway,
+                             "dns": list(p.dns)} for p in self.profiles]}
+        return parse_config(raw, "perfiles")
 
     def save(self) -> None:
         try:

@@ -92,45 +92,6 @@ def test_ai_page_installs_and_removes_claude_recorder(qtbot):
     assert h.install_calls == ["install", "uninstall"]
 
 
-def test_network_page_loads_profiles_and_adapters(qtbot):
-    h = Harness(qtbot)
-    page = h.window.network
-    assert page.adapter.currentText() == "Wi-Fi"
-    assert page.table.rowCount() == 1
-    assert [page.table.item(0, c).text() for c in range(5)] == [
-        "Casa", "192.168.0.100", "24", "192.168.0.254", "192.168.0.254, 8.8.8.8"]
-
-
-def test_network_page_add_profile_and_save(qtbot):
-    h = Harness(qtbot)
-    page = h.window.network
-    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
-    for column, value in enumerate(["Oficina", "10.0.0.50", "24", "10.0.0.1", "10.0.0.1"]):
-        page.table.item(1, column).setText(value)
-    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
-    saved = h.ip_saved[-1]
-    assert [p.name for p in saved.profiles] == ["Casa", "Oficina"]
-    assert saved.profiles[1] == StaticProfile("Oficina", "10.0.0.50", 24, "10.0.0.1", ("10.0.0.1",))
-    assert "Guardado" in page.message.text()
-
-
-def test_network_page_remove_profile(qtbot):
-    h = Harness(qtbot)
-    page = h.window.network
-    page.table.selectRow(0)
-    qtbot.mouseClick(page.remove_button, Qt.MouseButton.LeftButton)
-    assert page.table.rowCount() == 0
-
-
-def test_invalid_profile_is_rejected_before_asking_for_admin(qtbot):
-    h = Harness(qtbot)
-    page = h.window.network
-    page.table.item(0, 3).setText("10.0.0.1")
-    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
-    assert h.ip_saved == []
-    assert "fuera" in page.message.text()
-
-
 def test_save_failure_is_shown(qtbot):
     def ip_save(config):
         raise ConfigError("Guardado cancelado: se necesita permiso de administrador.")
@@ -148,24 +109,6 @@ def test_network_page_without_install_explains_and_disables_save(qtbot):
     page = h.window.network
     assert "install" in page.message.text()
     assert not page.save_button.isEnabled()
-
-
-def test_empty_rows_are_ignored(qtbot):
-    h = Harness(qtbot)
-    page = h.window.network
-    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
-    assert [p.name for p in h.ip_saved[-1].profiles] == ["Casa"]
-
-
-def test_partial_row_names_the_profile(qtbot):
-    h = Harness(qtbot)
-    page = h.window.network
-    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
-    page.table.item(1, 0).setText("Oficina")
-    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
-    assert h.ip_saved == []
-    assert "Oficina" in page.message.text()
 
 
 def test_general_chooses_which_apps_show_in_the_bar(qtbot):
@@ -226,3 +169,80 @@ def test_settings_window_requests_dark_title_bar_when_shown(qtbot, monkeypatch):
     h.window.show()
     qtbot.waitExposed(h.window)
     assert calls and calls[0] != 0
+
+
+OFICINA = StaticProfile("Oficina", "10.0.0.50", 24, "10.0.0.1", ("10.0.0.1",))
+
+
+def test_network_page_shows_profiles_as_cards(qtbot):
+    h = Harness(qtbot)
+    page = h.window.network
+    assert page.adapter.currentText() == "Wi-Fi"
+    assert page.profiles == [CASA]
+    assert len(page.cards) == 1
+    text = page.cards[0].summary()
+    assert "Casa" in text and "192.168.0.100/24" in text and "192.168.0.254" in text and "8.8.8.8" in text
+
+
+def test_add_edit_and_remove_profiles_through_the_editor(qtbot):
+    h = Harness(qtbot)
+    page = h.window.network
+    page.editor = lambda profile, parent: OFICINA
+    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
+    assert page.profiles == [CASA, OFICINA]
+    page.editor = lambda profile, parent: replace(profile, ip="192.168.0.101")
+    qtbot.mouseClick(page.cards[0].edit_button, Qt.MouseButton.LeftButton)
+    assert page.profiles[0].ip == "192.168.0.101"
+    page.editor = lambda profile, parent: None  # cancelado
+    qtbot.mouseClick(page.cards[1].edit_button, Qt.MouseButton.LeftButton)
+    assert page.profiles[1] == OFICINA
+    qtbot.mouseClick(page.cards[1].remove_button, Qt.MouseButton.LeftButton)
+    assert [p.name for p in page.profiles] == ["Casa"]
+    assert len(page.cards) == 1
+
+
+def test_save_sends_card_profiles(qtbot):
+    h = Harness(qtbot)
+    page = h.window.network
+    page.editor = lambda profile, parent: OFICINA
+    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.ip_saved[-1] == AppConfig("Wi-Fi", (CASA, OFICINA))
+    assert "Guardado" in page.message.text()
+
+
+def test_duplicate_names_are_rejected_before_asking_for_admin(qtbot):
+    h = Harness(qtbot)
+    page = h.window.network
+    page.editor = lambda profile, parent: replace(OFICINA, name="Casa")
+    qtbot.mouseClick(page.add_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.ip_saved == []
+    assert "duplicado" in page.message.text()
+
+
+def test_profile_editor_validates_inputs(qtbot):
+    from dock.settings import ProfileEditor
+
+    editor = ProfileEditor(None)
+    qtbot.addWidget(editor)
+    editor.name.setText("Oficina")
+    editor.ip.setText("10.0.0.50")
+    editor.prefix.setValue(24)
+    editor.gateway.setText("192.168.0.1")
+    editor.dns1.setText("10.0.0.1")
+    assert editor.try_accept() is False
+    assert "fuera" in editor.error.text()
+    editor.gateway.setText("10.0.0.1")
+    assert editor.try_accept() is True
+    assert editor.profile() == OFICINA
+
+
+def test_profile_editor_prefills_existing_profile(qtbot):
+    from dock.settings import ProfileEditor
+
+    editor = ProfileEditor(CASA)
+    qtbot.addWidget(editor)
+    assert (editor.name.text(), editor.ip.text(), editor.prefix.value(), editor.gateway.text(),
+            editor.dns1.text(), editor.dns2.text()) == ("Casa", "192.168.0.100", 24, "192.168.0.254",
+                                                        "192.168.0.254", "8.8.8.8")

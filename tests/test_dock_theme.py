@@ -24,7 +24,7 @@ def test_panel_uses_the_scale():
 
 
 def test_settings_uses_the_scale():
-    for selector in ("QListWidget::item", "QComboBox, QSpinBox"):
+    for selector in ("QListWidget::item", "QComboBox, QSpinBox, QLineEdit"):
         assert radius_of(settings.STYLE, selector) == R_CONTROL
-    assert radius_of(settings.STYLE, "QTableWidget") == R_CARD
+    assert radius_of(settings.STYLE, "QFrame#profileCard") == R_CARD
     assert radius_of(settings.STYLE, "QCheckBox::indicator") == R_SMALL
