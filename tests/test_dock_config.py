@@ -13,7 +13,7 @@ def test_missing_creates_default(tmp_path):
 
 def test_roundtrip(tmp_path):
     path = tmp_path / "dock.json"
-    config = DockConfig(edge="left", width=400, backdrop="none", tools=("subscriptions",), pinned=True, position=0.25)
+    config = DockConfig(edge="left", width=400, tools=("subscriptions",), pinned=True, position=0.25)
     save_dock_config(path, config)
     assert load_dock_config(path) == config
 
@@ -30,7 +30,6 @@ def test_partial_file_uses_defaults(tmp_path):
         ({"edge": "bottom"}, "edge"),
         ({"width": 50}, "width"),
         ({"width": "ancho"}, "width"),
-        ({"backdrop": "glass"}, "backdrop"),
         ({"tools": ["../os"]}, "herramienta"),
         ({"tools": "ip_switch"}, "tools"),
         ([1], "dock.json"),
@@ -74,3 +73,9 @@ def test_top_edge_is_valid(tmp_path):
     path = tmp_path / "dock.json"
     path.write_text('{"edge": "top"}', encoding="utf-8")
     assert load_dock_config(path).edge == "top"
+
+
+def test_old_backdrop_key_is_ignored(tmp_path):
+    path = tmp_path / "dock.json"
+    path.write_text('{"backdrop": "acrylic"}', encoding="utf-8")
+    assert load_dock_config(path) == DockConfig()

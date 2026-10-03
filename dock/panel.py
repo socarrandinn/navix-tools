@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 from typing import Callable
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath, QPen, QRegion
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+)
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QBoxLayout,
@@ -20,7 +31,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .backdrop import apply_backdrop
 from .config import DockConfig
 from .geometry import (
     BAR,
@@ -36,7 +46,7 @@ from .geometry import (
     is_vertical,
     snap,
 )
-from .glass import droplet_path, paint_glass
+from .liquid import droplet_path, paint_liquid
 from .icons import svg_icon
 from .registry import LoadedTool
 from .tool import Tool
@@ -44,6 +54,8 @@ from .tool import Tool
 DRAG_THRESHOLD = 4
 QT_MAX = 16777215
 EXPANDED_RADIUS = 22
+WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
+HOVER_JIGGLE = 0.4
 
 STYLE = """
 QWidget { color: #f0f4f8; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
@@ -168,7 +180,9 @@ class Panel(QWidget):
         self.on_config_change = on_config_change
         self.on_close = on_close or QApplication.quit
         self.revealed = False
-        self.backdrop_active = False
+        self.wobble = 0.0
+        self._phase = 0.0
+        self.wobble_ms = 650
         self.dragging = False
         self._press_global: QPoint | None = None
         self._press_offset = QPoint()
@@ -198,6 +212,9 @@ class Panel(QWidget):
         self.hide_timer.timeout.connect(self.conceal)
         self.animation = QPropertyAnimation(self, b"geometry", self)
         self.animation.finished.connect(self._after_animation)
+        self.wobble_anim = QVariantAnimation(self)
+        self.wobble_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.wobble_anim.valueChanged.connect(self._on_wobble)
 
         self.flyout.setVisible(False)
         self.setGeometry(QRect(*self._target(False)))
@@ -406,6 +423,7 @@ class Panel(QWidget):
         self.animation.setStartValue(self.geometry())
         self.animation.setEndValue(target)
         self.animation.start()
+        self.jiggle(1.0)
 
     def _after_animation(self) -> None:
         if not self.revealed:
@@ -413,10 +431,28 @@ class Panel(QWidget):
         self._update_shape()
         self.update()
 
+    def jiggle(self, strength: float = 1.0) -> None:
+        """Onda líquida que se amortigua: la gota tiembla y vuelve a su forma."""
+        if not self.isVisible() or self.wobble_ms <= 0:
+            return
+        self.wobble_anim.stop()
+        self.wobble_anim.setDuration(self.wobble_ms)
+        self.wobble_anim.setStartValue(float(strength))
+        self.wobble_anim.setEndValue(0.0)
+        self.wobble_anim.start()
+
+    def _on_wobble(self, value) -> None:
+        value = float(value)
+        self.wobble = value * WOBBLE_PX
+        self._phase = (1.0 - value) * 4 * math.pi
+        self._update_shape()
+        self.update()
+
     def _update_shape(self) -> None:
+        # Sin setMask: la máscara de Windows es dentada; los píxeles transparentes ya dejan pasar los clics.
         radius = EXPANDED_RADIUS if self.revealed else BAR / 2
-        self._path = droplet_path(self.width(), self.height(), self.config.edge, radius, FLARE)
-        self.setMask(QRegion(self._path.toFillPolygon().toPolygon()))
+        self._path = droplet_path(self.width(), self.height(), self.config.edge, radius, FLARE,
+                                  wobble=self.wobble, phase=self._phase)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -489,6 +525,8 @@ class Panel(QWidget):
 
     def enterEvent(self, event) -> None:
         self.hide_timer.stop()
+        if self.wobble_anim.state() != QVariantAnimation.State.Running:
+            self.jiggle(HOVER_JIGGLE)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
@@ -496,14 +534,9 @@ class Panel(QWidget):
             self.hide_timer.start()
         super().leaveEvent(event)
 
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        if self.config.backdrop == "acrylic" and not self.backdrop_active:
-            self.backdrop_active = apply_backdrop(int(self.winId()))
-
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        paint_glass(painter, self._path, self.backdrop_active)
+        paint_liquid(painter, self._path)
         if self.revealed:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setPen(QPen(QColor(255, 255, 255, 40), 1))

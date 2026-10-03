@@ -8,7 +8,6 @@ from pathlib import Path
 
 TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 EDGES = {"left", "right", "top"}
-BACKDROPS = {"acrylic", "none"}
 
 
 class DockConfigError(Exception):
@@ -19,7 +18,6 @@ class DockConfigError(Exception):
 class DockConfig:
     edge: str = "right"
     width: int = 320
-    backdrop: str = "acrylic"
     tools: tuple[str, ...] = ("ip_switch", "ai_usage")
     pinned: bool = False
     position: float = 0.5
@@ -55,9 +53,6 @@ def load_dock_config(path: Path) -> DockConfig:
     width = raw.get("width", default.width)
     if not isinstance(width, int) or not 200 <= width <= 600:
         raise DockConfigError(f"{path}: width debe ser un entero entre 200 y 600")
-    backdrop = raw.get("backdrop", default.backdrop)
-    if backdrop not in BACKDROPS:
-        raise DockConfigError(f"{path}: backdrop debe ser acrylic o none")
     tools = raw.get("tools", list(default.tools))
     if not isinstance(tools, list):
         raise DockConfigError(f"{path}: tools debe ser una lista")
@@ -70,5 +65,5 @@ def load_dock_config(path: Path) -> DockConfig:
     position = raw.get("position", default.position)
     if isinstance(position, bool) or not isinstance(position, (int, float)) or not 0 <= position <= 1:
         raise DockConfigError(f"{path}: position debe ser un número entre 0 y 1")
-    return DockConfig(edge=edge, width=width, backdrop=backdrop, tools=tuple(tools),
+    return DockConfig(edge=edge, width=width, tools=tuple(tools),
                       pinned=pinned, position=float(position))

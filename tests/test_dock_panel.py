@@ -4,7 +4,6 @@ from PySide6.QtCore import QEvent, QPoint, QPointF
 from PySide6.QtGui import QEnterEvent
 from PySide6.QtWidgets import QLabel
 
-from dock.backdrop import apply_backdrop
 from dock.config import DockConfig
 from dock.geometry import BAR, bar_length, bar_rect, expanded_rect
 from dock.panel import Panel
@@ -57,7 +56,7 @@ def make_panel(qtbot, loaded=None, config=None, area=AREA, **kwargs):
     if loaded is None:
         loaded = [LoadedTool("contador", CountingTool(), None), LoadedTool("otra", OtherTool(), None)]
     kwargs.setdefault("fit_content", False)
-    panel = Panel(config or DockConfig(backdrop="none"), loaded, lambda: state["area"], animation_ms=0,
+    panel = Panel(config or DockConfig(), loaded, lambda: state["area"], animation_ms=0,
                   panel_height=400, on_config_change=state["saved"].append, on_close=on_close, **kwargs)
     qtbot.addWidget(panel)
     return panel, state
@@ -120,7 +119,7 @@ def test_bar_stays_on_screen_edge_side(qtbot):
     right.open_tool("contador")
     right.layout().activate()
     assert right.bar.geometry().x() > right.flyout.geometry().x()
-    left, _ = make_panel(qtbot, config=DockConfig(backdrop="none", edge="left"))
+    left, _ = make_panel(qtbot, config=DockConfig(edge="left"))
     left.open_tool("contador")
     left.layout().activate()
     assert left.bar.geometry().x() < left.flyout.geometry().x()
@@ -150,7 +149,7 @@ def test_hover_alone_does_not_expand(qtbot):
 
 
 def test_pinned_config_starts_with_first_app_open_and_ignores_leave(qtbot):
-    panel, _ = make_panel(qtbot, config=DockConfig(backdrop="none", pinned=True), hide_delay_ms=10)
+    panel, _ = make_panel(qtbot, config=DockConfig(pinned=True), hide_delay_ms=10)
     assert panel.revealed is True
     assert panel.current == "contador"
     leave(panel)
@@ -275,10 +274,6 @@ def test_single_instance(qapp):
     third.close()
 
 
-def test_apply_backdrop_invalid_window_returns_false():
-    assert apply_backdrop(0) is False
-
-
 def test_grip_is_a_drawn_handle_with_move_cursor(qtbot):
     from PySide6.QtCore import Qt
 
@@ -319,18 +314,35 @@ def test_drag_to_top_makes_horizontal_bar_that_opens_down(qtbot):
 
 
 def test_top_config_starts_horizontal(qtbot):
-    panel, _ = make_panel(qtbot, config=DockConfig(backdrop="none", edge="top"))
+    panel, _ = make_panel(qtbot, config=DockConfig(edge="top"))
     assert rect(panel) == bar_rect(AREA, "top", 0.5, BAR2)
 
 
-def test_window_is_masked_to_a_droplet(qtbot):
+def test_no_window_mask_so_edges_stay_antialiased(qtbot):
     panel, _ = make_panel(qtbot)
-    mask = panel.mask()
-    assert not mask.isEmpty()
-    assert mask.contains(QPoint(BAR // 2, BAR2 // 2))
-    assert not mask.contains(QPoint(0, 0))
+    assert panel.mask().isEmpty()
     panel.open_tool("contador")
-    assert panel.mask().contains(QPoint(rect(panel)[2] // 2, rect(panel)[3] // 2))
+    assert panel.mask().isEmpty()
+
+
+def test_opening_starts_a_decaying_wobble(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.animation_ms = 60
+    panel.wobble_ms = 120
+    panel.show()
+    qtbot.waitExposed(panel)
+    panel.open_tool("contador")
+    qtbot.waitUntil(lambda: panel.wobble > 0.5, timeout=1000)
+    qtbot.waitUntil(lambda: panel.wobble == 0.0, timeout=2000)
+
+
+def test_hover_makes_the_droplet_jiggle(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.wobble_ms = 120
+    panel.show()
+    qtbot.waitExposed(panel)
+    enter(panel)
+    qtbot.waitUntil(lambda: panel.wobble > 0.2, timeout=1000)
 
 
 def test_expand_animation_is_springy(qtbot):

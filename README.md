@@ -56,7 +56,7 @@ Editar `C:\ProgramData\ipswitch\config.json` con un editor abierto como administ
 .\.venv\Scripts\pythonw -m dock
 ```
 
-Gota de vidrio líquido (40 px) pegada al borde izquierdo, derecho o **superior** de la pantalla,
+Gota líquida oscura (40 px) pegada al borde izquierdo, derecho o **superior** de la pantalla,
 con un ícono por micro-app:
 
 - Clic en un ícono despliega esa app hacia adentro de la pantalla; clic de nuevo la cierra; clic en otro ícono cambia de app.
@@ -64,8 +64,7 @@ con un ícono por micro-app:
 - Arrastrá la gota desde los puntos de agarre: al soltarla se pega al borde más cercano
   (en el borde superior la barra es horizontal y la app se abre hacia abajo).
 - Clic derecho: Fijar panel / Salir.
-- Vidrio: blur acrylic de Windows 11 recortado a la forma de gota + reflejos pintados.
-  Con `"backdrop": "none"` usa un vidrio opaco sin blur.
+- Efecto líquido: al abrir, cerrar o pasar el mouse la gota ondula y vuelve a su forma.
 - Íconos: [Lucide](https://lucide.dev) (ISC), en `dock/assets/icons`.
 
 Apps incluidas:
@@ -84,5 +83,5 @@ Agregar una app: crear `dock/tools/<nombre>.py` con una clase que herede `dock.t
 Config en `%APPDATA%\ipdock\dock.json` (se guarda solo al mover o fijar):
 
 ```json
-{"edge": "right", "width": 320, "backdrop": "acrylic", "tools": ["ip_switch"], "pinned": false, "position": 0.5}
+{"edge": "right", "width": 320, "tools": ["ip_switch", "ai_usage"], "pinned": false, "position": 0.5}
 ```
