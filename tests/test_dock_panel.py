@@ -637,3 +637,13 @@ def test_drag_rail_is_hidden_until_hover(qtbot):
     assert panel.grip.shown is True
     leave(panel)
     assert panel.grip.shown is False
+
+
+def test_menu_has_icons_and_hover_style(qtbot):
+    panel, _ = make_panel(qtbot)
+    menu = panel.build_menu()
+    actions = [a for a in menu.actions() if a.text()]
+    assert all(not a.icon().isNull() for a in actions)
+    style = menu.styleSheet()
+    assert "QMenu::item:selected" in style
+    assert "border-radius" in style

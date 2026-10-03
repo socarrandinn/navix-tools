@@ -93,6 +93,14 @@ QProgressBar[level="high"]::chunk { background: rgba(248, 81, 73, 220); }
 """, icon=ICON, header=HEADER_BUTTON)
 
 
+MENU_STYLE = themed("""
+QMenu { background: #1d212c; border: 1px solid rgba(255, 255, 255, 30); border-radius: @cardpx; padding: 6px; }
+QMenu::item { color: #e6edf3; padding: 8px 18px 8px 12px; border-radius: @controlpx; font-size: 13px; }
+QMenu::item:selected { background: rgba(255, 255, 255, 30); }
+QMenu::icon { padding-left: 10px; }
+QMenu::separator { height: 1px; background: rgba(255, 255, 255, 24); margin: 6px 8px; }
+""")
+
 class Grip(QWidget):
     """Riel de arrastre a todo lo largo del lado de la barra pegado a la pantalla.
 
@@ -757,13 +765,22 @@ class Panel(QWidget):
 
     def build_menu(self) -> QMenu:
         menu = QMenu(self)
-        settings = menu.addAction("Configuración")
-        settings.triggered.connect(lambda: self.on_settings())
-        pin = menu.addAction("Soltar panel" if self.config.pinned else "Fijar panel")
-        pin.triggered.connect(self.toggle_pin)
+        menu.setWindowFlags(menu.windowFlags() | Qt.WindowType.FramelessWindowHint
+                            | Qt.WindowType.NoDropShadowWindowHint)
+        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        menu.setStyleSheet(MENU_STYLE)
+
+        def add(text: str, icon: str, slot) -> None:
+            action = menu.addAction(text)
+            svg = svg_icon(icon, size=16)
+            if svg is not None:
+                action.setIcon(svg)
+            action.triggered.connect(slot)
+
+        add("Configuración", "settings", lambda: self.on_settings())
+        add("Soltar panel" if self.config.pinned else "Fijar panel", "pin", self.toggle_pin)
         menu.addSeparator()
-        close = menu.addAction("Salir")
-        close.triggered.connect(lambda: self.on_close())
+        add("Salir", "power", lambda: self.on_close())
         return menu
 
     def exec_menu(self, menu: QMenu, position: QPoint) -> None:
