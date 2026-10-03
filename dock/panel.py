@@ -388,7 +388,7 @@ class Panel(QWidget):
             self.bar.setFixedSize(BAR, self.bar_len)
             self.bar_column.setFixedWidth(BAR)
             self.flyout.setFixedWidth(self.config.width)
-            self.flyout.layout().setContentsMargins(22, 16, 20, 18)
+            self.flyout.layout().setContentsMargins(16, 12, 14, 14)
         else:
             root.setDirection(QBoxLayout.Direction.TopToBottom)
             order = (self.bar_column, self.flyout)
@@ -399,7 +399,7 @@ class Panel(QWidget):
             icons.setContentsMargins(FLARE + END_PAD, side, FLARE + END_PAD, side)
             self.bar.setFixedSize(self.bar_len, BAR)
             self.bar_column.setFixedHeight(BAR)
-            self.flyout.layout().setContentsMargins(22, 16, 20, 18)
+            self.flyout.layout().setContentsMargins(16, 12, 14, 14)
         self.grip.set_vertical(vertical)
         for widget in rail_order:
             outer.addWidget(widget)

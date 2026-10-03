@@ -10,7 +10,7 @@ END_PAD = 16      # aire en cada extremo de la columna de íconos
 SETTINGS_SLOT = 28  # engranaje (menú) al final de la barra
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
 MARGIN = 12       # separación mínima a lo largo del borde
-GAP = 16          # hueco entre la barra y la gota de la app (lugar para el cuello líquido)
+GAP = 8           # hueco entre la barra y la gota de la app (lugar para el cuello líquido)
 PANEL_HEIGHT = 420
 EDGES = ("left", "right", "top")
 

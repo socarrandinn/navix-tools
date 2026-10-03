@@ -433,8 +433,8 @@ def test_content_has_breathing_room_from_droplet_edges(qtbot, edge):
 
     panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
     flyout = panel.flyout.layout().contentsMargins()
-    assert min(flyout.left(), flyout.right()) >= 20
-    assert min(flyout.top(), flyout.bottom()) >= 16
+    assert min(flyout.left(), flyout.right()) >= 14
+    assert min(flyout.top(), flyout.bottom()) >= 12
     assert (BAR - ICON) // 2 >= 7
     card = panel.cards["contador"].layout().contentsMargins()
     assert min(card.left(), card.top(), card.right(), card.bottom()) >= 14
