@@ -3,7 +3,7 @@ from __future__ import annotations
 Rect = tuple[int, int, int, int]
 
 BAR = 40          # ancho de la barra de apps
-GRIP = 16         # zona de agarre para arrastrar
+GRIP = 20         # zona de agarre para arrastrar
 ICON = 30         # botón de cada app
 ICON_GAP = 4
 BAR_PADDING = 8

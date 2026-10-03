@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Callable
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -29,7 +29,6 @@ DRAG_THRESHOLD = 4
 
 STYLE = """
 QWidget { color: #e6edf3; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
-QLabel#grip { color: #8b949e; font-size: 12px; }
 QToolButton#appIcon { border: none; border-radius: 8px; font-size: 13px; font-weight: 600; }
 QToolButton#appIcon:hover { background: rgba(255, 255, 255, 40); }
 QToolButton#appIcon:checked { background: rgba(88, 166, 255, 110); }
@@ -49,6 +48,40 @@ QProgressBar { background: rgba(255, 255, 255, 20); border: none; border-radius:
                text-align: right; font-size: 11px; }
 QProgressBar::chunk { background: #58a6ff; border-radius: 4px; }
 """
+
+
+class Grip(QWidget):
+    """Agarre para arrastrar la barra: 2x3 puntos dibujados, cursor de mover.
+
+    No consume los clics: el evento sube hasta Panel, que maneja el arrastre.
+    """
+
+    COLUMNS, ROWS, SPACING, RADIUS = 2, 3, 5, 1.6
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(GRIP)
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setToolTip("Arrastrá para mover · clic derecho para el menú")
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+
+    def dots(self) -> int:
+        return self.COLUMNS * self.ROWS
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        hovered = self.underMouse()
+        painter.setBrush(QColor(230, 237, 243) if hovered else QColor(139, 148, 158))
+        width = (self.COLUMNS - 1) * self.SPACING
+        height = (self.ROWS - 1) * self.SPACING
+        left = (self.width() - width) / 2
+        top = (self.height() - height) / 2
+        for column in range(self.COLUMNS):
+            for row in range(self.ROWS):
+                center = QPointF(left + column * self.SPACING, top + row * self.SPACING)
+                painter.drawEllipse(center, self.RADIUS, self.RADIUS)
 
 
 class Card(QFrame):
@@ -143,12 +176,8 @@ class Panel(QWidget):
         layout = QVBoxLayout(bar)
         layout.setContentsMargins((BAR - ICON) // 2, 0, (BAR - ICON) // 2, 4)
         layout.setSpacing(ICON_GAP)
-        grip = QLabel("⋯")
-        grip.setObjectName("grip")
-        grip.setFixedHeight(GRIP)
-        grip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grip.setToolTip("Arrastrá para mover · clic derecho para el menú")
-        layout.addWidget(grip)
+        self.grip = Grip()
+        layout.addWidget(self.grip)
         return bar
 
     def _build_flyout(self) -> QWidget:

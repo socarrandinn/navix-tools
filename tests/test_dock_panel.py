@@ -277,3 +277,27 @@ def test_single_instance(qapp):
 
 def test_apply_backdrop_invalid_window_returns_false():
     assert apply_backdrop(0) is False
+
+
+def test_grip_is_a_drawn_handle_with_move_cursor(qtbot):
+    from PySide6.QtCore import Qt
+
+    from dock.panel import Grip
+
+    panel, _ = make_panel(qtbot)
+    assert isinstance(panel.grip, Grip)
+    assert panel.grip.cursor().shape() == Qt.CursorShape.SizeAllCursor
+    assert panel.grip.toolTip().startswith("Arrastrá")
+    assert panel.grip.dots() == 6
+
+
+def test_drag_from_grip_reaches_panel(qtbot):
+    from PySide6.QtCore import Qt
+
+    panel, state = make_panel(qtbot)
+    panel.show()
+    qtbot.waitExposed(panel)
+    start = panel.grip.mapToGlobal(panel.grip.rect().center())
+    qtbot.mousePress(panel.grip, Qt.MouseButton.LeftButton, pos=panel.grip.rect().center())
+    assert panel._press_global is not None
+    panel.end_drag(start)
