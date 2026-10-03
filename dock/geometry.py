@@ -2,8 +2,7 @@ from __future__ import annotations
 
 Rect = tuple[int, int, int, int]
 
-BAR = 60          # grosor de la barra con el riel visible (riel + columna de íconos)
-RAIL = 16         # riel de arrastre, a todo lo largo del lado pegado a la pantalla (con padding)
+BAR = 44          # grosor de la barra de apps
 ICON = 28         # botón de cada app
 ICON_GAP = 4
 END_PAD = 16      # aire en cada extremo de la columna de íconos
@@ -24,7 +23,8 @@ def is_vertical(edge: str) -> bool:
 
 
 def bar_length(tools: int) -> int:
-    return max(1, tools) * (ICON + ICON_GAP) + SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
+    # agarre + apps + engranaje, con aire en cada extremo
+    return (1 + max(1, tools)) * (ICON + ICON_GAP) + SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
 
 
 def bar_rect(area: Rect, edge: str, position: float, length: int, thickness: int = BAR,

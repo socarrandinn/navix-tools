@@ -45,7 +45,6 @@ from .geometry import (
     ICON_GAP,
     MARGIN,
     PANEL_HEIGHT,
-    RAIL,
     Rect,
     bar_length,
     bar_rect,
@@ -65,7 +64,7 @@ QT_MAX = 16777215
 EXPANDED_RADIUS = R_SURFACE
 HEADER_BUTTON = 28  # pin y cerrar: botones de ícono redondos
 APP_ICON = 15       # tamaño del dibujo dentro de cada botón de la barra
-DOT_STEP, DOT_ROW_GAP, DOT_RADIUS = 5.0, 4.0, 1.2
+DOT_STEP, DOT_RADIUS = 5.0, 1.4
 WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
 HOVER_JIGGLE = 0.4
 DETACH_DISTANCE = 70  # px que hay que tirar hacia adentro para despegar la gota
@@ -104,7 +103,7 @@ QMenu::separator { height: 1px; background: rgba(255, 255, 255, 24); margin: 6px
 """)
 
 class Grip(QWidget):
-    """Riel de arrastre a todo lo largo del lado de la barra pegado a la pantalla.
+    """Agarre para arrastrar: botón redondo con doble fila de puntos, primero en la columna de íconos.
 
     No consume los clics: el evento sube hasta Panel, que maneja el arrastre.
     """
@@ -112,43 +111,34 @@ class Grip(QWidget):
     def __init__(self):
         super().__init__()
         self.vertical = True
-        self.shown = False  # se dibuja solo con el mouse sobre la barra
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.setToolTip("Arrastrá para mover · clic derecho para el menú")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
-        self.set_vertical(True)
+        self.setFixedSize(ICON, ICON)
 
     def set_vertical(self, vertical: bool) -> None:
         self.vertical = vertical
-        self.setMinimumSize(0, 0)
-        self.setMaximumSize(QT_MAX, QT_MAX)
-        if vertical:
-            self.setFixedWidth(RAIL)
-        else:
-            self.setFixedHeight(RAIL)
         self.update()
 
-    def set_shown(self, shown: bool) -> None:
-        self.shown = shown
-        self.update()
+    def dots(self) -> int:
+        return 6
 
     def paintEvent(self, event) -> None:
-        if not (self.shown or self.underMouse()):
-            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(255, 255, 255, 200) if self.underMouse() else QColor(255, 255, 255, 90))
-        # Doble fila de puntos a lo largo del riel (⋮⋮ vertical, ······ en dos filas horizontal).
-        long_side = self.height() if self.vertical else self.width()
-        count = max(3, min(8, int(long_side * 0.4 // DOT_STEP)))
-        span = (count - 1) * DOT_STEP
-        for row in (-DOT_ROW_GAP / 2, DOT_ROW_GAP / 2):
-            for index in range(count):
-                along = (long_side - span) / 2 + index * DOT_STEP
-                across = (self.width() if self.vertical else self.height()) / 2 + row
-                center = QPointF(across, along) if self.vertical else QPointF(along, across)
-                painter.drawEllipse(center, DOT_RADIUS, DOT_RADIUS)
+        hovered = self.underMouse()
+        if hovered:
+            painter.setBrush(QColor(255, 255, 255, 46))
+            painter.drawEllipse(QRectF(0, 0, self.width(), self.height()))
+        painter.setBrush(QColor(255, 255, 255, 230) if hovered else QColor(255, 255, 255, 150))
+        # Doble fila de puntos: ⋮⋮ en barras verticales, dos filas ··· en la barra superior.
+        columns, rows = (2, 3) if self.vertical else (3, 2)
+        left = (self.width() - (columns - 1) * DOT_STEP) / 2
+        top = (self.height() - (rows - 1) * DOT_STEP) / 2
+        for column in range(columns):
+            for row in range(rows):
+                painter.drawEllipse(QPointF(left + column * DOT_STEP, top + row * DOT_STEP), DOT_RADIUS, DOT_RADIUS)
 
 
 class Card(QFrame):
@@ -222,7 +212,6 @@ class Panel(QWidget):
         self._titles: dict[str, str] = {}
         self.timers: list[QTimer] = []
         self.bar_len = bar_length(len(loaded))
-        self._rail_shown = False
 
         self.bar = self._build_bar()
         self.flyout = self._build_flyout()
@@ -292,6 +281,8 @@ class Panel(QWidget):
         self.icons_box = QWidget()
         icons = QBoxLayout(QBoxLayout.Direction.TopToBottom, self.icons_box)
         icons.setSpacing(ICON_GAP)
+        icons.addWidget(self.grip, 0, Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self.icons_box)
         return bar
 
     def _build_flyout(self) -> QWidget:
@@ -384,10 +375,8 @@ class Panel(QWidget):
         root.removeWidget(self.flyout)
         outer: QBoxLayout = self.bar.layout()
         icons: QBoxLayout = self.icons_box.layout()
-        outer.removeWidget(self.grip)
-        outer.removeWidget(self.icons_box)
         column: QBoxLayout = self.bar_column.layout()
-        side = (BAR - RAIL - ICON) // 2
+        side = (BAR - ICON) // 2
         for widget in (self.bar, self.bar_column, self.flyout):
             widget.setMinimumSize(0, 0)
             widget.setMaximumSize(QT_MAX, QT_MAX)
@@ -395,29 +384,22 @@ class Panel(QWidget):
             root.setDirection(QBoxLayout.Direction.LeftToRight)
             order = (self.flyout, self.bar_column) if edge == "right" else (self.bar_column, self.flyout)
             column.setDirection(QBoxLayout.Direction.TopToBottom)
-            outer.setDirection(QBoxLayout.Direction.LeftToRight)
-            rail_order = (self.icons_box, self.grip) if edge == "right" else (self.grip, self.icons_box)
             icons.setDirection(QBoxLayout.Direction.TopToBottom)
             icons.setContentsMargins(side, FLARE + END_PAD, side, FLARE + END_PAD)
-            self.bar.setFixedSize(self._thickness(), self.bar_len)
-            self.bar_column.setFixedWidth(self._thickness())
+            self.bar.setFixedSize(BAR, self.bar_len)
+            self.bar_column.setFixedWidth(BAR)
             self.flyout.setFixedWidth(self.config.width)
             self.flyout.layout().setContentsMargins(16, 12, 14, 14)
         else:
             root.setDirection(QBoxLayout.Direction.TopToBottom)
             order = (self.bar_column, self.flyout)
             column.setDirection(QBoxLayout.Direction.LeftToRight)
-            outer.setDirection(QBoxLayout.Direction.TopToBottom)
-            rail_order = (self.grip, self.icons_box)
             icons.setDirection(QBoxLayout.Direction.LeftToRight)
             icons.setContentsMargins(FLARE + END_PAD, side, FLARE + END_PAD, side)
-            self.bar.setFixedSize(self.bar_len, self._thickness())
-            self.bar_column.setFixedHeight(self._thickness())
+            self.bar.setFixedSize(self.bar_len, BAR)
+            self.bar_column.setFixedHeight(BAR)
             self.flyout.layout().setContentsMargins(16, 12, 14, 14)
         self.grip.set_vertical(vertical)
-        self.grip.setVisible(self._rail_shown)
-        for widget in rail_order:
-            outer.addWidget(widget)
         for widget in order:
             root.addWidget(widget)
 
@@ -433,7 +415,6 @@ class Panel(QWidget):
     def open_tool(self, name: str) -> None:
         self.hide_timer.stop()
         self._cancel_drag()
-        self.set_rail(True)
         self.current = name
         self.stack.setCurrentWidget(self.cards[name])
         self.title.setText(self._titles[name])
@@ -496,10 +477,6 @@ class Panel(QWidget):
     def _bud_finished(self) -> None:
         if not self.revealed and self.bud == 0.0:
             self.flyout.setVisible(False)
-            if not self.underMouse():
-                self._rail_shown = False
-                self.grip.set_shown(False)
-                self._arrange()
             self._set_rect(self._target(False))
         self._refresh_shape()
 
@@ -522,7 +499,7 @@ class Panel(QWidget):
         if revealed:
             return expanded_rect(area, self.config.edge, self.config.position, self.bar_len,
                                  self.config.width, self._content_height())
-        return bar_rect(area, self.config.edge, self.config.position, self.bar_len, thickness=self._thickness())
+        return bar_rect(area, self.config.edge, self.config.position, self.bar_len)
 
     def _set_rect(self, rect: Rect) -> None:
         self.setGeometry(QRect(*rect))
@@ -683,7 +660,6 @@ class Panel(QWidget):
     def begin_drag(self, global_pos: QPoint) -> None:
         if self.revealed:
             return
-        self.set_rail(True)
         self.animation.stop()
         self._press_global = QPoint(global_pos)
         self._press_offset = global_pos - self.pos()
@@ -726,20 +702,6 @@ class Panel(QWidget):
             travel = max(1, aw - 2 * MARGIN - self.bar_len)
             value = (start_x + along - ax - MARGIN) / travel
         return round(max(0.0, min(1.0, value)), 4)
-
-    def _thickness(self) -> int:
-        return BAR if self._rail_shown else BAR - RAIL
-
-    def set_rail(self, shown: bool) -> None:
-        """Muestra el riel de arrastre (barra completa) u oculta y encoge la barra."""
-        if shown == self._rail_shown:
-            return
-        self._rail_shown = shown
-        self.grip.set_shown(shown)
-        self._arrange()
-        if not self.revealed and self._press_global is None and not self.detached:
-            self.animation.stop()
-            self._set_rect(self._target(False))
 
     def _cancel_drag(self) -> None:
         self._press_global = None
@@ -838,14 +800,11 @@ class Panel(QWidget):
 
     def enterEvent(self, event) -> None:
         self.hide_timer.stop()
-        self.set_rail(True)
         if self.wobble_anim.state() != QVariantAnimation.State.Running:
             self.jiggle(HOVER_JIGGLE)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        if self._press_global is None and not self.revealed:
-            self.set_rail(False)
         if self.revealed and not self.config.pinned:
             self.hide_timer.start()
         super().leaveEvent(event)
