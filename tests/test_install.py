@@ -98,6 +98,15 @@ def test_prepare_script_contents():
         assert fragment in script, fragment
 
 
+def test_prepare_script_lets_files_inherit_the_acl():
+    # (OI)(CI) con /T deja a los archivos con la DACL vacía: ni los usuarios pueden ejecutar IPDock.exe.
+    script = prepare_script(r"C:\ProgramData\ipswitch", r"C:\Program Files\ipswitch")
+    grants = [line for line in script.splitlines() if "/inheritance:r" in line]
+    assert grants and all("/T" not in line for line in grants)
+    assert "icacls (Join-Path $config '*') /reset /T /C" in script
+    assert "icacls (Join-Path $target '*') /reset /T /C" in script
+
+
 def test_register_script_contents():
     script = register_script(r"C:\Program Files\ipswitch\python\pythonw.exe", "-I -m ipswitch helper",
                              r"C:\Program Files\ipswitch\app")

@@ -81,8 +81,11 @@ def _secure_dir(variable: str) -> list[str]:
         f"New-Item -ItemType Directory -Force -Path {variable} | Out-Null",
         f"icacls {variable} /setowner '*S-1-5-32-544' /T /C | Out-Null",
         f'if ($LASTEXITCODE -ne 0) {{ throw "icacls /setowner falló ($LASTEXITCODE)" }}',
-        f"icacls {variable} {ADMIN_ONLY_ACL} /T /C | Out-Null",
+        # Las ACE (OI)(CI) solo valen en la carpeta: con /T los archivos quedan con la DACL vacía.
+        f"icacls {variable} {ADMIN_ONLY_ACL} /C | Out-Null",
         f'if ($LASTEXITCODE -ne 0) {{ throw "icacls falló ($LASTEXITCODE)" }}',
+        f"icacls (Join-Path {variable} '*') /reset /T /C | Out-Null",
+        f'if ($LASTEXITCODE -ne 0) {{ throw "icacls /reset falló ($LASTEXITCODE)" }}',
     ]
 
 
