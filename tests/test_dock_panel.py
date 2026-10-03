@@ -613,18 +613,21 @@ def test_opening_an_app_cancels_a_drag_in_progress(qtbot):
     assert rect(panel) == expanded_rect(AREA, "right", 0.5, BAR2, 320, 400)
 
 
-def test_header_buttons_are_round_outlined_icon_buttons(qtbot):
+def test_icon_buttons_are_round_ghost_buttons(qtbot):
     import re
 
-    from dock.panel import HEADER_BUTTON, STYLE
+    from dock.panel import HEADER_BUTTON, ICON, STYLE
 
     panel, _ = make_panel(qtbot)
     for button in (panel.pin_button, panel.close_button):
         assert button.width() == button.height() == HEADER_BUTTON
         assert button.text() == ""
-    block = re.search(r"QPushButton#headerButton \{([^}]*)\}", STYLE).group(1)
-    assert f"border-radius: {HEADER_BUTTON // 2}px" in block
-    assert "border: 1px solid" in block
+    for selector, size in (("QPushButton#headerButton", HEADER_BUTTON), ("QToolButton#appIcon", ICON)):
+        block = re.search(re.escape(selector) + r" \{([^}]*)\}", STYLE).group(1)
+        assert f"border-radius: {size // 2}px" in block
+        assert "border: none" in block and "background: transparent" in block
+        checked = re.search(re.escape(selector) + r":checked \{([^}]*)\}", STYLE).group(1)
+        assert "border" not in checked
 
 
 def test_drag_rail_is_hidden_until_hover(qtbot):

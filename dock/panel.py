@@ -72,15 +72,13 @@ NECK_REST = 14        # grosor del cuello que mantiene la app unida a la barra
 
 STYLE = themed("""
 QWidget { color: #f0f4f8; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
-QToolButton#appIcon { border: none; border-radius: @iconpx; font-size: 14px; font-weight: 600; }
+QToolButton#appIcon { background: transparent; border: none; border-radius: @iconpx; font-size: 14px; font-weight: 600; }
 QToolButton#appIcon:hover { background: rgba(255, 255, 255, 46); }
-QToolButton#appIcon:checked { background: rgba(255, 255, 255, 70); border: 1px solid rgba(255, 255, 255, 120); }
+QToolButton#appIcon:checked { background: rgba(255, 255, 255, 64); }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; }
-QPushButton#headerButton { background: rgba(255, 255, 255, 14); border: 1px solid rgba(255, 255, 255, 46);
-                           border-radius: @headerpx; padding: 0px;
-                           font-size: 13px; }
+QPushButton#headerButton { background: transparent; border: none; border-radius: @headerpx; padding: 0px; }
 QPushButton#headerButton:hover { background: rgba(255, 255, 255, 46); }
-QPushButton#headerButton:checked { background: rgba(88, 166, 255, 90); border-color: rgba(150, 200, 255, 200); }
+QPushButton#headerButton:checked { background: rgba(88, 166, 255, 90); }
 QFrame#card { background: rgba(255, 255, 255, 16); border: 1px solid rgba(255, 255, 255, 34); border-radius: @cardpx; }
 QLabel#cardError { color: #ff7b72; }
 QPushButton { background: rgba(255, 255, 255, 34); border: 1px solid rgba(255, 255, 255, 60);
