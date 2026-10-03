@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 from dataclasses import replace
 from typing import Callable, Sequence
 
@@ -68,6 +69,22 @@ QCheckBox { spacing: 10px; background: transparent; }
 QCheckBox::indicator { width: 36px; height: 20px; border-radius: @smallpx; background: #2b3245; border: 1px solid #3a4258; }
 QCheckBox::indicator:checked { background: #2f6feb; border-color: #4c8dff; }
 """)
+
+
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+
+
+def dark_title_bar(hwnd: int) -> bool:
+    """Pide a Windows la barra de título oscura (Windows 10 20H1+ / 11). False si no se pudo."""
+    if not hwnd:
+        return False
+    try:
+        value = ctypes.c_int(1)
+        result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            ctypes.c_void_p(hwnd), DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(value), ctypes.sizeof(value))
+    except (AttributeError, OSError):
+        return False
+    return result == 0
 
 
 # --- piezas de UI reutilizables -----------------------------------------------------------
@@ -522,6 +539,10 @@ class SettingsWindow(QWidget):
         self.nav.setCurrentRow(0)
         layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        dark_title_bar(int(self.winId()))
 
     def section_names(self) -> list[str]:
         return list(self._pages)

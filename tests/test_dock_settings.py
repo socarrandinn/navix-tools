@@ -209,3 +209,20 @@ def test_switches_are_drawn_toggles(qtbot):
     assert (box.sizeHint().width(), box.sizeHint().height()) == (40, 22)
     qtbot.mouseClick(box, Qt.MouseButton.LeftButton)
     assert box.isChecked() is False
+
+
+def test_dark_title_bar_helper_handles_invalid_window():
+    from dock.settings import dark_title_bar
+
+    assert dark_title_bar(0) is False
+
+
+def test_settings_window_requests_dark_title_bar_when_shown(qtbot, monkeypatch):
+    import dock.settings as settings_module
+
+    calls = []
+    monkeypatch.setattr(settings_module, "dark_title_bar", lambda hwnd: calls.append(hwnd) or True)
+    h = Harness(qtbot)
+    h.window.show()
+    qtbot.waitExposed(h.window)
+    assert calls and calls[0] != 0
