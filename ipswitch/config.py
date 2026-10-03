@@ -30,16 +30,19 @@ def default_config_path() -> Path:
     return known_folder(FOLDERID_PROGRAM_DATA) / "ipswitch" / "config.json"
 
 
-def save_config(path: Path, config: AppConfig) -> None:
-    data = {
+def config_to_dict(config: AppConfig) -> dict:
+    return {
         "adapter": config.adapter,
         "profiles": [
             {"name": p.name, "ip": p.ip, "prefix": p.prefix, "gateway": p.gateway, "dns": list(p.dns)}
             for p in config.profiles
         ],
     }
+
+
+def save_config(path: Path, config: AppConfig) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(json.dumps(config_to_dict(config), indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def ensure_config(path: Path) -> None:
@@ -47,13 +50,9 @@ def ensure_config(path: Path) -> None:
         save_config(path, DEFAULT_CONFIG)
 
 
-def load_config(path: Path) -> AppConfig:
-    if not path.exists():
-        raise ConfigError(
-            f"No existe {path}. En una terminal de administrador ejecuta: python -m ipswitch install"
-        )
+def parse_config(raw, source: str) -> AppConfig:
+    """Valida un config ya decodificado (dict) con las mismas reglas que load_config."""
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
         adapter = str(raw["adapter"]).strip()
         profiles = tuple(
             StaticProfile(
@@ -65,17 +64,29 @@ def load_config(path: Path) -> AppConfig:
             )
             for p in raw["profiles"]
         )
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise ConfigError(f"No se pudo leer {path}: falta o es inválido {exc}") from exc
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ConfigError(f"No se pudo leer {source}: falta o es inválido {exc}") from exc
     if not adapter:
-        raise ConfigError(f"{path}: el adaptador no puede estar vacío")
+        raise ConfigError(f"{source}: el adaptador no puede estar vacío")
     seen: set[str] = set()
     for profile in profiles:
         try:
             profile.validate()
         except ProfileError as exc:
-            raise ConfigError(f"{path}: {exc}") from exc
+            raise ConfigError(f"{source}: {exc}") from exc
         if profile.name in seen:
-            raise ConfigError(f"{path}: nombre de perfil duplicado: {profile.name}")
+            raise ConfigError(f"{source}: nombre de perfil duplicado: {profile.name}")
         seen.add(profile.name)
     return AppConfig(adapter=adapter, profiles=profiles)
+
+
+def load_config(path: Path) -> AppConfig:
+    if not path.exists():
+        raise ConfigError(
+            f"No existe {path}. En una terminal de administrador ejecuta: python -m ipswitch install"
+        )
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ConfigError(f"No se pudo leer {path}: falta o es inválido {exc}") from exc
+    return parse_config(raw, str(path))

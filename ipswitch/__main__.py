@@ -5,7 +5,8 @@ import sys
 
 from .actions import active_label
 from .client import HelperError, request_switch
-from .config import ConfigError, default_config_path, load_config
+from .config import ConfigError, default_config_path, load_config, save_config
+from .elevate import decode_config
 from .helper import results_dir, run_helper, runtime_dir
 from .install import InstallError, install, is_admin, uninstall
 from .status import StatusError, describe, read_status
@@ -21,6 +22,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("install", help="(admin) crea config, permisos y tarea programada")
     sub.add_parser("uninstall", help="(admin) borra la tarea programada")
     sub.add_parser("helper", help="uso interno de la tarea programada")
+    save = sub.add_parser("save-config", help="(admin) guarda perfiles recibidos de IPDock")
+    save.add_argument("data")
     return parser
 
 
@@ -37,6 +40,12 @@ def main(argv: list[str] | None = None) -> int:
             result = request_switch("dhcp") if args.command == "dhcp" else request_switch("profile", args.name)
             print(result.message)
             return 0 if result.ok else 1
+        if args.command == "save-config":
+            if not is_admin():
+                print("Requiere permisos de administrador.", file=sys.stderr)
+                return 1
+            save_config(default_config_path(), decode_config(args.data))
+            return 0
         if args.command in ("install", "uninstall"):
             if not is_admin():
                 print("Requiere una terminal abierta como administrador.", file=sys.stderr)
