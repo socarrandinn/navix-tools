@@ -9,7 +9,7 @@ R_CONTROL = 10  # botones, campos, ítems de lista
 R_SMALL = 6     # barras de progreso, casillas, pie de la gota al estirarse
 
 
-def themed(style: str, icon: int = 30) -> str:
+def themed(style: str, icon: int = 30, header: int = 28) -> str:
     return (style.replace("@surface", str(R_SURFACE)).replace("@card", str(R_CARD))
             .replace("@control", str(R_CONTROL)).replace("@small", str(R_SMALL))
-            .replace("@icon", str(icon // 2)))
+            .replace("@icon", str(icon // 2)).replace("@header", str(header // 2)))

@@ -40,11 +40,12 @@ from .geometry import (
     BAR,
     FLARE,
     GAP,
-    GRIP,
+    END_PAD,
     ICON,
     ICON_GAP,
     MARGIN,
     PANEL_HEIGHT,
+    RAIL,
     Rect,
     bar_length,
     bar_rect,
@@ -62,6 +63,7 @@ from .tool import Tool
 DRAG_THRESHOLD = 4
 QT_MAX = 16777215
 EXPANDED_RADIUS = R_SURFACE
+HEADER_BUTTON = 28  # pin y cerrar: botones de ícono redondos
 WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
 HOVER_JIGGLE = 0.4
 DETACH_DISTANCE = 70  # px que hay que tirar hacia adentro para despegar la gota
@@ -74,10 +76,11 @@ QToolButton#appIcon { border: none; border-radius: @iconpx; font-size: 14px; fon
 QToolButton#appIcon:hover { background: rgba(255, 255, 255, 46); }
 QToolButton#appIcon:checked { background: rgba(255, 255, 255, 70); border: 1px solid rgba(255, 255, 255, 120); }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; }
-QPushButton#headerButton { background: transparent; border: none; border-radius: @controlpx; padding: 2px 7px;
+QPushButton#headerButton { background: rgba(255, 255, 255, 14); border: 1px solid rgba(255, 255, 255, 46);
+                           border-radius: @headerpx; padding: 0px;
                            font-size: 13px; }
 QPushButton#headerButton:hover { background: rgba(255, 255, 255, 46); }
-QPushButton#headerButton:checked { background: rgba(255, 255, 255, 80); }
+QPushButton#headerButton:checked { background: rgba(88, 166, 255, 90); border-color: rgba(150, 200, 255, 200); }
 QFrame#card { background: rgba(255, 255, 255, 16); border: 1px solid rgba(255, 255, 255, 34); border-radius: @cardpx; }
 QLabel#cardError { color: #ff7b72; }
 QPushButton { background: rgba(255, 255, 255, 34); border: 1px solid rgba(255, 255, 255, 60);
@@ -85,21 +88,18 @@ QPushButton { background: rgba(255, 255, 255, 34); border: 1px solid rgba(255, 2
 QPushButton:hover { background: rgba(255, 255, 255, 56); }
 QPushButton:disabled { color: #8b949e; }
 QPushButton[active="true"] { background: rgba(120, 190, 255, 90); border-color: rgba(170, 215, 255, 220); }
-QProgressBar { background: rgba(255, 255, 255, 26); border: none; border-radius: @smallpx;
-               text-align: center; font-size: 11px; min-height: 16px; }
-QProgressBar::chunk { background: rgba(63, 185, 80, 210); border-radius: @smallpx; }
+QProgressBar { background: rgba(255, 255, 255, 26); border: none; border-radius: 3px; }
+QProgressBar::chunk { background: rgba(63, 185, 80, 210); border-radius: 3px; }
 QProgressBar[level="warn"]::chunk { background: rgba(210, 153, 34, 220); }
 QProgressBar[level="high"]::chunk { background: rgba(248, 81, 73, 220); }
-""", icon=ICON)
+""", icon=ICON, header=HEADER_BUTTON)
 
 
 class Grip(QWidget):
-    """Agarre para arrastrar la barra: puntos dibujados, cursor de mover.
+    """Riel de arrastre a todo lo largo del lado de la barra pegado a la pantalla.
 
     No consume los clics: el evento sube hasta Panel, que maneja el arrastre.
     """
-
-    SPACING, RADIUS = 5, 1.6
 
     def __init__(self):
         super().__init__()
@@ -114,30 +114,23 @@ class Grip(QWidget):
         self.setMinimumSize(0, 0)
         self.setMaximumSize(QT_MAX, QT_MAX)
         if vertical:
-            self.setFixedSize(ICON, GRIP)
+            self.setFixedWidth(RAIL)
         else:
-            self.setFixedSize(GRIP, ICON)
+            self.setFixedHeight(RAIL)
         self.update()
-
-    def _grid(self) -> tuple[int, int]:
-        return (2, 3) if self.vertical else (3, 2)
-
-    def dots(self) -> int:
-        columns, rows = self._grid()
-        return columns * rows
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(255, 255, 255, 230) if self.underMouse() else QColor(255, 255, 255, 140))
-        columns, rows = self._grid()
-        left = (self.width() - (columns - 1) * self.SPACING) / 2
-        top = (self.height() - (rows - 1) * self.SPACING) / 2
-        for column in range(columns):
-            for row in range(rows):
-                center = QPointF(left + column * self.SPACING, top + row * self.SPACING)
-                painter.drawEllipse(center, self.RADIUS, self.RADIUS)
+        painter.setBrush(QColor(255, 255, 255, 200) if self.underMouse() else QColor(255, 255, 255, 90))
+        long_side = self.height() if self.vertical else self.width()
+        length = max(24.0, long_side * 0.4)
+        if self.vertical:
+            handle = QRectF((self.width() - 4) / 2, (self.height() - length) / 2, 4, length)
+        else:
+            handle = QRectF((self.width() - length) / 2, (self.height() - 4) / 2, length, 4)
+        painter.drawRoundedRect(handle, 2, 2)
 
 
 class Card(QFrame):
@@ -216,11 +209,11 @@ class Panel(QWidget):
         self.flyout = self._build_flyout()
         for item in loaded:
             self._add_tool(item)
-        self.bar.layout().addStretch(1)
+        self.icons_box.layout().addStretch(1)
         self.settings_button = QToolButton()
         self.settings_button.setObjectName("appIcon")
         self.settings_button.setToolTip("Configuración")
-        self.settings_button.setFixedSize(22, 22)
+        self.settings_button.setFixedSize(24, 24)
         gear = svg_icon("settings", color="#aab4c0", size=15)
         if gear is not None:
             self.settings_button.setIcon(gear)
@@ -228,7 +221,19 @@ class Panel(QWidget):
         else:
             self.settings_button.setText("⚙")
         self.settings_button.clicked.connect(lambda: self.on_settings())
-        self.bar.layout().addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignCenter)
+        self.icons_box.layout().addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignCenter)
+        self.quit_button = QToolButton()
+        self.quit_button.setObjectName("appIcon")
+        self.quit_button.setToolTip("Salir de IPDock")
+        self.quit_button.setFixedSize(24, 24)
+        power = svg_icon("power", color="#aab4c0", size=15)
+        if power is not None:
+            self.quit_button.setIcon(power)
+            self.quit_button.setIconSize(QSize(15, 15))
+        else:
+            self.quit_button.setText("⏻")
+        self.quit_button.clicked.connect(lambda: self.on_close())
+        self.icons_box.layout().addWidget(self.quit_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         # La barra vive en una columna con un espaciador: así, con la app abierta, la barra
         # mantiene su tamaño y su lugar aunque la ventana se haya corrido para entrar en pantalla.
@@ -273,10 +278,13 @@ class Panel(QWidget):
 
     def _build_bar(self) -> QWidget:
         bar = QWidget()
-        layout = QBoxLayout(QBoxLayout.Direction.TopToBottom, bar)
-        layout.setSpacing(ICON_GAP)
+        outer = QBoxLayout(QBoxLayout.Direction.LeftToRight, bar)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
         self.grip = Grip()
-        layout.addWidget(self.grip, 0, Qt.AlignmentFlag.AlignCenter)
+        self.icons_box = QWidget()
+        icons = QBoxLayout(QBoxLayout.Direction.TopToBottom, self.icons_box)
+        icons.setSpacing(ICON_GAP)
         return bar
 
     def _build_flyout(self) -> QWidget:
@@ -291,8 +299,8 @@ class Panel(QWidget):
         self.pin_button.setToolTip("Fijar panel abierto")
         self.pin_button.clicked.connect(self.toggle_pin)
         self.close_button = self._header_button("x", "✕")
-        self.close_button.setToolTip("Cerrar IPDock")
-        self.close_button.clicked.connect(lambda: self.on_close())
+        self.close_button.setToolTip("Cerrar panel")
+        self.close_button.clicked.connect(lambda: self.conceal(force=True))
         header.addWidget(self.title)
         header.addStretch(1)
         header.addWidget(self.pin_button)
@@ -311,6 +319,7 @@ class Panel(QWidget):
             button.setIcon(icon)
             button.setIconSize(QSize(15, 15))
         button.setObjectName("headerButton")
+        button.setFixedSize(HEADER_BUTTON, HEADER_BUTTON)
         return button
 
     def _add_tool(self, item: LoadedTool) -> None:
@@ -341,7 +350,7 @@ class Panel(QWidget):
         button.setFixedSize(ICON, ICON)
         button.clicked.connect(lambda _checked=False, name=item.name: self._icon_clicked(name))
         self.tool_buttons[item.name] = button
-        self.bar.layout().addWidget(button, 0, Qt.AlignmentFlag.AlignCenter)
+        self.icons_box.layout().addWidget(button, 0, Qt.AlignmentFlag.AlignCenter)
 
     def _start_refresh(self, tool: Tool, card: Card) -> None:
         self._safe_refresh(tool, card)
@@ -366,9 +375,12 @@ class Panel(QWidget):
         root: QBoxLayout = self.layout()
         root.removeWidget(self.bar_column)
         root.removeWidget(self.flyout)
-        bar_layout: QBoxLayout = self.bar.layout()
+        outer: QBoxLayout = self.bar.layout()
+        icons: QBoxLayout = self.icons_box.layout()
+        outer.removeWidget(self.grip)
+        outer.removeWidget(self.icons_box)
         column: QBoxLayout = self.bar_column.layout()
-        side = (BAR - ICON) // 2
+        side = (BAR - RAIL - ICON) // 2
         for widget in (self.bar, self.bar_column, self.flyout):
             widget.setMinimumSize(0, 0)
             widget.setMaximumSize(QT_MAX, QT_MAX)
@@ -376,8 +388,10 @@ class Panel(QWidget):
             root.setDirection(QBoxLayout.Direction.LeftToRight)
             order = (self.flyout, self.bar_column) if edge == "right" else (self.bar_column, self.flyout)
             column.setDirection(QBoxLayout.Direction.TopToBottom)
-            bar_layout.setDirection(QBoxLayout.Direction.TopToBottom)
-            bar_layout.setContentsMargins(side, FLARE + 4, side, FLARE + 6)
+            outer.setDirection(QBoxLayout.Direction.LeftToRight)
+            rail_order = (self.icons_box, self.grip) if edge == "right" else (self.grip, self.icons_box)
+            icons.setDirection(QBoxLayout.Direction.TopToBottom)
+            icons.setContentsMargins(side, FLARE + END_PAD, side, FLARE + END_PAD)
             self.bar.setFixedSize(BAR, self.bar_len)
             self.bar_column.setFixedWidth(BAR)
             self.flyout.setFixedWidth(self.config.width)
@@ -386,12 +400,16 @@ class Panel(QWidget):
             root.setDirection(QBoxLayout.Direction.TopToBottom)
             order = (self.bar_column, self.flyout)
             column.setDirection(QBoxLayout.Direction.LeftToRight)
-            bar_layout.setDirection(QBoxLayout.Direction.LeftToRight)
-            bar_layout.setContentsMargins(FLARE + 6, side, FLARE + 4, side)
+            outer.setDirection(QBoxLayout.Direction.TopToBottom)
+            rail_order = (self.grip, self.icons_box)
+            icons.setDirection(QBoxLayout.Direction.LeftToRight)
+            icons.setContentsMargins(FLARE + END_PAD, side, FLARE + END_PAD, side)
             self.bar.setFixedSize(self.bar_len, BAR)
             self.bar_column.setFixedHeight(BAR)
             self.flyout.layout().setContentsMargins(22, 16, 20, 18)
         self.grip.set_vertical(vertical)
+        for widget in rail_order:
+            outer.addWidget(widget)
         for widget in order:
             root.addWidget(widget)
 
@@ -406,6 +424,7 @@ class Panel(QWidget):
 
     def open_tool(self, name: str) -> None:
         self.hide_timer.stop()
+        self._cancel_drag()
         self.current = name
         self.stack.setCurrentWidget(self.cards[name])
         self.title.setText(self._titles[name])
@@ -423,8 +442,8 @@ class Panel(QWidget):
         if self.cards:
             self.open_tool(self.current or next(iter(self.cards)))
 
-    def conceal(self) -> None:
-        if self.revealed and not self.config.pinned:
+    def conceal(self, force: bool = False) -> None:
+        if self.revealed and (force or not self.config.pinned):
             self.revealed = False
             self._animate_bud(0.0)
             self._sync_buttons()
@@ -693,6 +712,14 @@ class Panel(QWidget):
             travel = max(1, aw - 2 * MARGIN - self.bar_len)
             value = (start_x + along - ax - MARGIN) / travel
         return round(max(0.0, min(1.0, value)), 4)
+
+    def _cancel_drag(self) -> None:
+        self._press_global = None
+        self.dragging = False
+        self.detached = False
+        if self._pull:
+            self._pull = 0.0
+            self._set_pull_margin(0)
 
     def _set_pull_margin(self, pull: int) -> None:
         """Mientras se estira, los íconos acompañan al cuerpo de la gota (no al pie en el borde)."""

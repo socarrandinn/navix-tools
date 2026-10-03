@@ -8,7 +8,7 @@ L = 80
 
 def test_bar_length_grows_with_tools_and_leaves_room_for_flares():
     assert bar_length(1) < bar_length(3)
-    assert bar_length(1) <= 110
+    assert bar_length(1) <= 140
     assert bar_length(0) == bar_length(1)
     assert bar_length(1) > 2 * FLARE
 

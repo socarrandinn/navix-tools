@@ -2,15 +2,15 @@ from __future__ import annotations
 
 Rect = tuple[int, int, int, int]
 
-BAR = 44          # grosor de la barra de apps
-GRIP = 20         # zona de agarre para arrastrar
-ICON = 30         # botón de cada app
+BAR = 54          # grosor de la barra de apps (riel + columna de íconos)
+RAIL = 10         # riel de arrastre, a todo lo largo del lado pegado a la pantalla
+ICON = 28         # botón de cada app
 ICON_GAP = 4
-BAR_PADDING = 12
-SETTINGS_SLOT = 24  # engranaje de configuración al final de la barra
+END_PAD = 16      # aire en cada extremo de la columna de íconos
+SETTINGS_SLOT = 28  # engranaje y salir, al final de la barra
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
 MARGIN = 12       # separación mínima a lo largo del borde
-GAP = 10          # espacio entre la barra y la gota de la app ya separada
+GAP = 16          # hueco entre la barra y la gota de la app (lugar para el cuello líquido)
 PANEL_HEIGHT = 420
 EDGES = ("left", "right", "top")
 
@@ -24,7 +24,7 @@ def is_vertical(edge: str) -> bool:
 
 
 def bar_length(tools: int) -> int:
-    return GRIP + max(1, tools) * (ICON + ICON_GAP) + SETTINGS_SLOT + BAR_PADDING + 2 * FLARE
+    return max(1, tools) * (ICON + ICON_GAP) + 2 * SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
 
 
 def bar_rect(area: Rect, edge: str, position: float, length: int, thickness: int = BAR,

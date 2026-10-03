@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QLabel, QProgressBar, QVBoxLayout, QWidget
 
 from ..config import AI_SOURCES, DockConfigError, dock_dir, load_dock_config
@@ -13,6 +14,8 @@ from ..usage import UsageSnapshot, age_text, read_claude, read_codex, reset_text
 from ..worker import RunAsync, run_async
 
 SOURCES = ("Claude", "Codex")
+MODEL_GAP = 16  # separación entre el bloque de cada modelo
+BAR_HEIGHT = 6
 HINTS = {
     "Claude": "Sin datos. Ejecutá `python -m dock.statusline install` y usá Claude Code.",
     "Codex": "Sin datos. Usá Codex CLI para registrar el uso.",
@@ -44,25 +47,36 @@ class AiUsageTool(Tool):
         self.loading = False
         self.headers: dict[str, QLabel] = {}
         self.ages: dict[str, QLabel] = {}
-        self.rows: dict[str, list[tuple[QLabel, QProgressBar]]] = {source: [] for source in SOURCES}
+        self.rows: dict[str, list[tuple[QLabel, QProgressBar, QLabel]]] = {source: [] for source in SOURCES}
+        self.blocks: dict[str, QWidget] = {}
         self._grids: dict[str, QGridLayout] = {}
 
     def create_widget(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(MODEL_GAP)
+        self._layout = layout
         for source in SOURCES:
+            block = QWidget()
+            inner = QVBoxLayout(block)
+            inner.setContentsMargins(0, 0, 0, 0)
+            inner.setSpacing(6)
             header = QLabel(source)
-            header.setStyleSheet("font-weight: 600; margin-top: 4px;")
+            header.setStyleSheet("font-weight: 600;")
             age = QLabel("")
             age.setWordWrap(True)
-            age.setStyleSheet("color: rgba(240, 244, 248, 170); font-size: 11px;")
+            age.setStyleSheet("color: rgba(240, 244, 248, 150); font-size: 11px;")
             grid = QGridLayout()
-            grid.setColumnStretch(1, 1)
-            layout.addWidget(header)
-            layout.addLayout(grid)
-            layout.addWidget(age)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setHorizontalSpacing(8)
+            grid.setVerticalSpacing(3)
+            grid.setColumnStretch(0, 1)
+            inner.addWidget(header)
+            inner.addLayout(grid)
+            inner.addWidget(age)
+            layout.addWidget(block)
+            self.blocks[source] = block
             self.headers[source], self.ages[source], self._grids[source] = header, age, grid
         self.message = QLabel("")
         self.message.setWordWrap(True)
@@ -83,7 +97,7 @@ class AiUsageTool(Tool):
         enabled = {s.lower() for s in self._sources()}
         for source, snapshot in zip(SOURCES, snapshots):
             shown = source.lower() in enabled
-            for widget in (self.headers[source], self.ages[source]):
+            for widget in (self.blocks[source], self.headers[source], self.ages[source]):
                 widget.setVisible(shown)
             self._fill(source, snapshot if shown else None, now, shown)
 
@@ -93,8 +107,8 @@ class AiUsageTool(Tool):
 
     def _fill(self, source: str, snapshot: UsageSnapshot | None, now: datetime, shown: bool = True) -> None:
         grid = self._grids[source]
-        for label, bar in self.rows[source]:
-            for widget in (label, bar):
+        for row in self.rows[source]:
+            for widget in row:
                 grid.removeWidget(widget)
                 widget.deleteLater()
         self.rows[source] = []
@@ -107,19 +121,27 @@ class AiUsageTool(Tool):
         self.headers[source].setText(f"{source} · {snapshot.plan}" if snapshot.plan else source)
         self.ages[source].setText(age_text(snapshot.captured_at, now))
         for index, window in enumerate(snapshot.windows):
+            # Fila de texto (ventana a la izquierda, % y reinicio a la derecha) y debajo la barra fina.
             label = QLabel(window.label)
-            label.setFixedWidth(52)
+            label.setStyleSheet("font-size: 12px;")
+            reset = reset_text(window.resets_at, now)
+            value = QLabel(f"{round(window.percent)}% · {reset}" if reset else f"{round(window.percent)}%")
+            value.setStyleSheet("font-size: 11px; color: rgba(240, 244, 248, 190);")
             bar = QProgressBar()
             bar.setRange(0, 100)
             bar.setValue(round(window.percent))
-            reset = reset_text(window.resets_at, now)
-            bar.setFormat(f"{round(window.percent)}% · {reset}" if reset else f"{round(window.percent)}%")
+            bar.setTextVisible(False)
+            bar.setFixedHeight(BAR_HEIGHT)
             bar.setProperty("level", window.level)
             bar.style().unpolish(bar)
             bar.style().polish(bar)
-            grid.addWidget(label, index, 0)
-            grid.addWidget(bar, index, 1)
-            self.rows[source].append((label, bar))
+            grid.addWidget(label, index * 2, 0)
+            grid.addWidget(value, index * 2, 1, Qt.AlignmentFlag.AlignRight)
+            grid.addWidget(bar, index * 2 + 1, 0, 1, 2)
+            self.rows[source].append((label, bar, value))
+
+    def layout_spacing_between_models(self) -> int:
+        return self._layout.spacing()
 
 
 def enabled_sources() -> tuple[str, ...]:

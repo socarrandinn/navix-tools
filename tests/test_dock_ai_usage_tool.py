@@ -33,7 +33,7 @@ def make(qtbot, claude=CLAUDE, codex=CODEX):
 
 
 def bars(tool, source):
-    return [(label.text(), bar.value(), bar.format(), bar.property("level")) for label, bar in tool.rows[source]]
+    return [(label.text(), bar.value(), value.text(), bar.property("level")) for label, bar, value in tool.rows[source]]
 
 
 def test_create_tool():
@@ -93,3 +93,16 @@ def test_disabled_sources_are_hidden(qtbot):
     assert tool.rows["Claude"] == []
     assert not tool.headers["Codex"].isHidden()
     assert len(tool.rows["Codex"]) == 1
+
+
+def test_bars_are_slim_and_text_sits_beside_them(qtbot):
+    tool = make(qtbot)
+    for label, bar, value in tool.rows["Claude"]:
+        assert bar.maximumHeight() <= 8
+        assert not bar.isTextVisible()
+
+
+def test_each_model_is_its_own_separated_block(qtbot):
+    tool = make(qtbot)
+    assert tool.layout_spacing_between_models() >= 14
+    assert tool.blocks["Claude"] is not tool.blocks["Codex"]

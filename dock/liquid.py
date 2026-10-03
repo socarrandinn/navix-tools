@@ -84,44 +84,52 @@ def paint_liquid(painter: QPainter, path: QPainterPath) -> None:
 
 
 def bridge_path(a: QRectF, b: QRectF, horizontal: bool, thickness: float) -> QPainterPath:
-    """Cuello líquido entre dos gotas enfrentadas, con lados cóncavos. Vacío si ya se cortó.
+    """Cuello líquido entre dos gotas enfrentadas, como un menisco. Vacío si ya se cortó.
 
-    horizontal=True: las gotas están una al lado de la otra (bordes izquierdo/derecho);
-    False: una arriba de la otra (borde superior).
+    El borde sale tangente a la pared de cada gota (sin esquinas) y se curva hasta el punto más
+    fino en el medio, así las gotas parecen fundirse. La unión con cada gota mide como mucho NECK_MAX.
+    horizontal=True: gotas una al lado de la otra (bordes izquierdo/derecho); False: una arriba de otra.
     """
     path = QPainterPath()
     if thickness <= 0.5:
         return path
     if horizontal:
         first, second = (a, b) if a.center().x() <= b.center().x() else (b, a)
-        top, bottom = max(first.top(), second.top()), min(first.bottom(), second.bottom())
-        if bottom <= top:
-            return path
-        cy = (top + bottom) / 2
-        attach = min((bottom - top) / 2, NECK_MAX / 2)
-        mid = min(thickness / 2, attach - 4)  # más fino en el medio: lados cóncavos
-        # Los extremos se anclan dentro de cada gota para que el cuello no asome por las esquinas.
-        x0 = first.right() - min(first.width() / 2, 18)
-        x1 = second.left() + min(second.width() / 2, 18)
-        xm = (x0 + x1) / 2
-        path.moveTo(x0, cy - attach)
-        path.cubicTo(xm, cy - mid, xm, cy - mid, x1, cy - attach)
-        path.lineTo(x1, cy + attach)
-        path.cubicTo(xm, cy + mid, xm, cy + mid, x0, cy + attach)
+        low, high = max(first.top(), second.top()), min(first.bottom(), second.bottom())
+        wall1, wall2 = first.right(), second.left()
     else:
         first, second = (a, b) if a.center().y() <= b.center().y() else (b, a)
-        left, right = max(first.left(), second.left()), min(first.right(), second.right())
-        if right <= left:
-            return path
-        cx = (left + right) / 2
-        attach = min((right - left) / 2, NECK_MAX / 2)
-        mid = min(thickness / 2, attach - 4)  # más fino en el medio: lados cóncavos
-        y0 = first.bottom() - min(first.height() / 2, 18)
-        y1 = second.top() + min(second.height() / 2, 18)
-        ym = (y0 + y1) / 2
-        path.moveTo(cx - attach, y0)
-        path.cubicTo(cx - mid, ym, cx - mid, ym, cx - attach, y1)
-        path.lineTo(cx + attach, y1)
-        path.cubicTo(cx + mid, ym, cx + mid, ym, cx + attach, y0)
+        low, high = max(first.left(), second.left()), min(first.right(), second.right())
+        wall1, wall2 = first.bottom(), second.top()
+    if high <= low or wall2 <= wall1:
+        return path
+    center = (low + high) / 2
+    attach = min((high - low) / 2, NECK_MAX / 2)
+    mid = min(thickness / 2, attach - 4)
+    middle = (wall1 + wall2) / 2
+    reach = (wall2 - wall1) / 4
+
+    # Contorno en coordenadas (u a lo largo del hueco, v a lo ancho); luego se vuelca al eje real.
+    outline = [("move", (wall1 - 2, center - attach)), ("line", (wall1, center - attach)),
+               ("cubic", (wall1, center - mid), (middle - reach, center - mid), (middle, center - mid)),
+               ("cubic", (middle + reach, center - mid), (wall2, center - mid), (wall2, center - attach)),
+               ("line", (wall2 + 2, center - attach)), ("line", (wall2 + 2, center + attach)),
+               ("line", (wall2, center + attach)),
+               ("cubic", (wall2, center + mid), (middle + reach, center + mid), (middle, center + mid)),
+               ("cubic", (middle - reach, center + mid), (wall1, center + mid), (wall1, center + attach)),
+               ("line", (wall1 - 2, center + attach))]
+
+    def point(uv):
+        u, v = uv
+        return QPointF(u, v) if horizontal else QPointF(v, u)
+
+    for kind, *coords in outline:
+        points = [point(c) for c in coords]
+        if kind == "move":
+            path.moveTo(points[0])
+        elif kind == "line":
+            path.lineTo(points[0])
+        else:
+            path.cubicTo(*points)
     path.closeSubpath()
     return path

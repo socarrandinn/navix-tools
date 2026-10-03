@@ -204,10 +204,18 @@ def test_app_opens_inward_after_moving_to_left(qtbot):
     assert panel.bar_column.geometry().x() < panel.flyout.geometry().x()
 
 
-def test_close_button_calls_on_close(qtbot):
-    panel, state = make_panel(qtbot)
-    panel.open_tool("contador")
+def test_app_close_button_only_closes_the_panel(qtbot):
+    panel, state = make_panel(qtbot, config=DockConfig(pinned=True))
+    assert panel.revealed
     panel.close_button.click()
+    assert panel.revealed is False
+    assert state["closed"] == 0
+
+
+def test_quit_lives_in_the_bar(qtbot):
+    panel, state = make_panel(qtbot)
+    assert not panel.quit_button.icon().isNull()
+    panel.quit_button.click()
     assert state["closed"] == 1
 
 
@@ -278,7 +286,29 @@ def test_grip_is_a_drawn_handle_with_move_cursor(qtbot):
     assert isinstance(panel.grip, Grip)
     assert panel.grip.cursor().shape() == Qt.CursorShape.SizeAllCursor
     assert panel.grip.toolTip().startswith("Arrastrá")
-    assert panel.grip.dots() == 6
+
+
+@pytest.mark.parametrize("edge", ["right", "left", "top"])
+def test_drag_rail_runs_the_full_length_on_the_screen_edge_side(qtbot, edge):
+    from dock.geometry import RAIL
+
+    panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
+    panel.show()
+    qtbot.waitExposed(panel)
+    qtbot.wait(20)
+    origin = panel.bar.mapTo(panel, QPoint(0, 0))
+    grip = panel.grip.geometry().translated(origin)
+    icon = panel.tool_buttons["contador"].geometry().translated(panel.tool_buttons["contador"].parentWidget().mapTo(panel, QPoint(0, 0)))
+    bar = panel.bar_shape_rect()
+    if edge == "right":
+        assert grip.width() <= RAIL and grip.left() > icon.right()
+        assert grip.height() >= bar.height() * 0.7
+    elif edge == "left":
+        assert grip.width() <= RAIL and grip.right() < icon.left()
+        assert grip.height() >= bar.height() * 0.7
+    else:
+        assert grip.height() <= RAIL and grip.bottom() < icon.top()
+        assert grip.width() >= bar.width() * 0.7
 
 
 def test_drag_from_grip_reaches_panel(qtbot):
@@ -547,3 +577,51 @@ def test_stretching_keeps_icons_centered_inside_the_drop(qtbot, edge, pull):
         body = (h - BAR, h)
         value = center.y()
     assert body[0] + 15 <= value <= body[1] - 15
+
+
+@pytest.mark.parametrize("edge", ["right", "top"])
+def test_icons_have_room_at_the_bar_ends_and_sides(qtbot, edge):
+    panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
+    panel.show()
+    qtbot.waitExposed(panel)
+    qtbot.wait(20)
+    bar = panel.bar_shape_rect()
+
+    def at(widget):
+        return widget.geometry().translated(widget.parentWidget().mapTo(panel, QPoint(0, 0)))
+
+    first, gear = at(panel.tool_buttons["contador"]), at(panel.settings_button)
+    if edge == "right":
+        assert first.top() - bar.top() >= 16
+        assert bar.bottom() - gear.bottom() >= 16
+        assert first.left() - bar.left() >= 8
+    else:
+        assert first.left() - bar.left() >= 16
+        assert bar.right() - gear.right() >= 16
+        assert bar.bottom() - first.bottom() >= 8
+
+
+def test_opening_an_app_cancels_a_drag_in_progress(qtbot):
+    panel, _ = make_panel(qtbot)
+    start = bar_center(panel)
+    panel.begin_drag(start)
+    panel.drag_to(start - QPoint(30, 0))
+    panel.open_tool("contador")
+    assert panel._press_global is None and not panel.dragging and panel._pull == 0.0
+    assert panel.layout().contentsMargins().right() == 0
+    panel.drag_to(start - QPoint(40, 0))
+    assert rect(panel) == expanded_rect(AREA, "right", 0.5, BAR2, 320, 400)
+
+
+def test_header_buttons_are_round_outlined_icon_buttons(qtbot):
+    import re
+
+    from dock.panel import HEADER_BUTTON, STYLE
+
+    panel, _ = make_panel(qtbot)
+    for button in (panel.pin_button, panel.close_button):
+        assert button.width() == button.height() == HEADER_BUTTON
+        assert button.text() == ""
+    block = re.search(r"QPushButton#headerButton \{([^}]*)\}", STYLE).group(1)
+    assert f"border-radius: {HEADER_BUTTON // 2}px" in block
+    assert "border: 1px solid" in block

@@ -16,8 +16,10 @@ def test_radius_scale_is_concentric():
 def test_panel_uses_the_scale():
     assert panel.EXPANDED_RADIUS == R_SURFACE
     assert radius_of(panel.STYLE, "QFrame#card") == R_CARD
-    assert radius_of(panel.STYLE, "QPushButton#headerButton") == R_CONTROL
-    assert radius_of(panel.STYLE, "QProgressBar") == R_SMALL
+    assert radius_of(panel.STYLE, "QPushButton#headerButton") == panel.HEADER_BUTTON // 2
+    from dock.tools.ai_usage import BAR_HEIGHT
+
+    assert radius_of(panel.STYLE, "QProgressBar") == BAR_HEIGHT // 2  # barra fina: píldora
     assert radius_of(panel.STYLE, "QToolButton#appIcon") == panel.ICON // 2
 
 

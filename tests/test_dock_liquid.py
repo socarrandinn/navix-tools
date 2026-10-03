@@ -92,3 +92,23 @@ def test_bridge_union_is_at_most_30px(qapp):
     top, bottom = QRectF(0, 0, 400, 44), QRectF(0, 54, 400, 300)
     box = bridge_path(top, bottom, horizontal=False, thickness=200).boundingRect()
     assert box.width() <= NECK_MAX + 0.5
+
+
+def test_bridge_meets_each_drop_tangentially_like_a_meniscus(qapp):
+    left, right = QRectF(0, 0, 200, 300), QRectF(216, 0, 44, 300)
+    neck = bridge_path(left, right, horizontal=True, thickness=14)
+    cy = 150
+    # pegado a cada pared, el líquido sube casi hasta el borde de la unión (filete suave)
+    assert inside(neck, left.right() + 0.5, cy - 10)
+    assert inside(neck, right.left() - 0.5, cy - 10)
+    # en el medio, el cuello es fino
+    assert not inside(neck, (left.right() + right.left()) / 2, cy - 9)
+    assert inside(neck, (left.right() + right.left()) / 2, cy - 6)
+
+
+def test_vertical_bridge_meniscus(qapp):
+    top, bottom = QRectF(0, 0, 300, 44), QRectF(0, 60, 300, 200)
+    neck = bridge_path(top, bottom, horizontal=False, thickness=14)
+    cx = 150
+    assert inside(neck, cx - 10, top.bottom() + 0.5)
+    assert not inside(neck, cx - 10, (top.bottom() + bottom.top()) / 2)
