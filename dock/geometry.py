@@ -7,7 +7,7 @@ RAIL = 10         # riel de arrastre, a todo lo largo del lado pegado a la panta
 ICON = 28         # botón de cada app
 ICON_GAP = 4
 END_PAD = 16      # aire en cada extremo de la columna de íconos
-SETTINGS_SLOT = 28  # engranaje y salir, al final de la barra
+SETTINGS_SLOT = 28  # engranaje (menú) al final de la barra
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
 MARGIN = 12       # separación mínima a lo largo del borde
 GAP = 16          # hueco entre la barra y la gota de la app (lugar para el cuello líquido)
@@ -24,7 +24,7 @@ def is_vertical(edge: str) -> bool:
 
 
 def bar_length(tools: int) -> int:
-    return max(1, tools) * (ICON + ICON_GAP) + 2 * SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
+    return max(1, tools) * (ICON + ICON_GAP) + SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
 
 
 def bar_rect(area: Rect, edge: str, position: float, length: int, thickness: int = BAR,

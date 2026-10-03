@@ -104,6 +104,7 @@ class Grip(QWidget):
     def __init__(self):
         super().__init__()
         self.vertical = True
+        self.shown = False  # se dibuja solo con el mouse sobre la barra
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.setToolTip("Arrastrá para mover · clic derecho para el menú")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
@@ -119,7 +120,13 @@ class Grip(QWidget):
             self.setFixedHeight(RAIL)
         self.update()
 
+    def set_shown(self, shown: bool) -> None:
+        self.shown = shown
+        self.update()
+
     def paintEvent(self, event) -> None:
+        if not (self.shown or self.underMouse()):
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -212,7 +219,7 @@ class Panel(QWidget):
         self.icons_box.layout().addStretch(1)
         self.settings_button = QToolButton()
         self.settings_button.setObjectName("appIcon")
-        self.settings_button.setToolTip("Configuración")
+        self.settings_button.setToolTip("Menú")
         self.settings_button.setFixedSize(24, 24)
         gear = svg_icon("settings", color="#aab4c0", size=15)
         if gear is not None:
@@ -220,20 +227,8 @@ class Panel(QWidget):
             self.settings_button.setIconSize(QSize(15, 15))
         else:
             self.settings_button.setText("⚙")
-        self.settings_button.clicked.connect(lambda: self.on_settings())
+        self.settings_button.clicked.connect(self._open_settings_menu)
         self.icons_box.layout().addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignCenter)
-        self.quit_button = QToolButton()
-        self.quit_button.setObjectName("appIcon")
-        self.quit_button.setToolTip("Salir de IPDock")
-        self.quit_button.setFixedSize(24, 24)
-        power = svg_icon("power", color="#aab4c0", size=15)
-        if power is not None:
-            self.quit_button.setIcon(power)
-            self.quit_button.setIconSize(QSize(15, 15))
-        else:
-            self.quit_button.setText("⏻")
-        self.quit_button.clicked.connect(lambda: self.on_close())
-        self.icons_box.layout().addWidget(self.quit_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         # La barra vive en una columna con un espaciador: así, con la app abierta, la barra
         # mantiene su tamaño y su lugar aunque la ventana se haya corrido para entrar en pantalla.
@@ -773,6 +768,14 @@ class Panel(QWidget):
         close.triggered.connect(lambda: self.on_close())
         return menu
 
+    def exec_menu(self, menu: QMenu, position: QPoint) -> None:
+        menu.exec(position)
+
+    def _open_settings_menu(self) -> None:
+        self.hide_timer.stop()
+        button = self.settings_button
+        self.exec_menu(self.build_menu(), button.mapToGlobal(button.rect().center()))
+
     def contextMenuEvent(self, event) -> None:
         self.hide_timer.stop()
         self.build_menu().exec(event.globalPos())
@@ -793,11 +796,14 @@ class Panel(QWidget):
 
     def enterEvent(self, event) -> None:
         self.hide_timer.stop()
+        self.grip.set_shown(True)
         if self.wobble_anim.state() != QVariantAnimation.State.Running:
             self.jiggle(HOVER_JIGGLE)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
+        if self._press_global is None:
+            self.grip.set_shown(False)
         if self.revealed and not self.config.pinned:
             self.hide_timer.start()
         super().leaveEvent(event)

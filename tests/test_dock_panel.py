@@ -212,11 +212,13 @@ def test_app_close_button_only_closes_the_panel(qtbot):
     assert state["closed"] == 0
 
 
-def test_quit_lives_in_the_bar(qtbot):
+def test_settings_icon_opens_a_menu_with_settings_pin_and_quit(qtbot):
     panel, state = make_panel(qtbot)
-    assert not panel.quit_button.icon().isNull()
-    panel.quit_button.click()
-    assert state["closed"] == 1
+    shown = []
+    panel.exec_menu = lambda menu, pos: shown.append([a.text() for a in menu.actions() if a.text()])
+    panel.settings_button.click()
+    assert shown == [["Configuración", "Fijar panel", "Salir"]]
+    assert not hasattr(panel, "quit_button")
 
 
 def test_reposition_follows_area_change(qtbot):
@@ -382,15 +384,13 @@ def test_svg_icon_names_render_as_icons(qtbot):
     assert not panel.close_button.icon().isNull()
 
 
-def test_settings_button_and_menu_open_settings(qtbot):
+def test_settings_menu_entry_opens_settings(qtbot):
     opened = []
     panel, _ = make_panel(qtbot, on_settings=lambda: opened.append(1))
-    panel.settings_button.click()
-    texts = [action.text() for action in panel.build_menu().actions() if action.text()]
-    assert texts == ["Configuración", "Fijar panel", "Salir"]
+    menu = panel.build_menu()
+    next(a for a in menu.actions() if a.text() == "Configuración").trigger()
     assert opened == [1]
     assert not panel.settings_button.icon().isNull()
-
 
 def test_apply_config_moves_and_resizes_live(qtbot):
     from dataclasses import replace
@@ -625,3 +625,12 @@ def test_header_buttons_are_round_outlined_icon_buttons(qtbot):
     block = re.search(r"QPushButton#headerButton \{([^}]*)\}", STYLE).group(1)
     assert f"border-radius: {HEADER_BUTTON // 2}px" in block
     assert "border: 1px solid" in block
+
+
+def test_drag_rail_is_hidden_until_hover(qtbot):
+    panel, _ = make_panel(qtbot)
+    assert panel.grip.shown is False
+    enter(panel)
+    assert panel.grip.shown is True
+    leave(panel)
+    assert panel.grip.shown is False
