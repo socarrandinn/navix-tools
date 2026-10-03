@@ -1,4 +1,22 @@
-# IP Switch
+# IPDock
+
+Barra lateral para Windows con micro-apps: cambio rápido entre DHCP e IP fija (sin UAC en cada
+cambio) y uso de los planes de Claude y Codex.
+
+## Instalar la v1
+
+Descargá `IPDock-Setup-1.0.0.exe` y ejecutalo (pide permisos de administrador una vez). Instala en
+`C:\Program Files\IPDock`, configura el helper de red y, si querés, lo inicia con Windows.
+
+Para generar el instalador desde el código:
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+powershell -ExecutionPolicy Bypass -File build.ps1   # requiere Inno Setup 6
+```
+
+## Desde el código (IP Switch)
 
 Cambia el adaptador de red de Windows entre DHCP y perfiles de IP fija, sin UAC en cada cambio.
 
