@@ -20,7 +20,7 @@ class DockConfig:
     edge: str = "right"
     width: int = 320
     backdrop: str = "acrylic"
-    tools: tuple[str, ...] = ("ip_switch",)
+    tools: tuple[str, ...] = ("ip_switch", "ai_usage")
     pinned: bool = False
     position: float = 0.5
 

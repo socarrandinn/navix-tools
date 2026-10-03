@@ -8,7 +8,7 @@ from dock.config import DockConfig, DockConfigError, dock_dir, load_dock_config,
 def test_missing_creates_default(tmp_path):
     path = tmp_path / "ipdock" / "dock.json"
     assert load_dock_config(path) == DockConfig()
-    assert json.loads(path.read_text(encoding="utf-8"))["tools"] == ["ip_switch"]
+    assert json.loads(path.read_text(encoding="utf-8"))["tools"] == ["ip_switch", "ai_usage"]
 
 
 def test_roundtrip(tmp_path):

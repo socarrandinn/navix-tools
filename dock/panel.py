@@ -44,9 +44,12 @@ QPushButton { background: rgba(255, 255, 255, 30); border: 1px solid rgba(255, 2
 QPushButton:hover { background: rgba(255, 255, 255, 50); }
 QPushButton:disabled { color: #6e7681; }
 QPushButton[active="true"] { background: rgba(88, 166, 255, 70); border-color: #58a6ff; }
-QProgressBar { background: rgba(255, 255, 255, 20); border: none; border-radius: 4px; height: 8px;
-               text-align: right; font-size: 11px; }
-QProgressBar::chunk { background: #58a6ff; border-radius: 4px; }
+QProgressBar { background: rgba(255, 255, 255, 20); border: none; border-radius: 4px;
+               text-align: center; font-size: 11px; }
+QProgressBar { min-height: 16px; }
+QProgressBar::chunk { background: #3fb950; border-radius: 4px; }
+QProgressBar[level="warn"]::chunk { background: #d29922; }
+QProgressBar[level="high"]::chunk { background: #f85149; }
 """
 
 
