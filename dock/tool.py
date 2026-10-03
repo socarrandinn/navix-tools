@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QWidget
 
 class Tool(ABC):
     title: str = ""
+    icon: str = "•"  # 1-2 caracteres o emoji que se muestra en la barra
     refresh_ms: int = 0
 
     @abstractmethod

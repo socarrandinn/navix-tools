@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import Callable
 
 from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -13,29 +13,32 @@ from PySide6.QtWidgets import (
     QLayout,
     QMenu,
     QPushButton,
-    QScrollArea,
+    QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from .backdrop import apply_backdrop
 from .config import DockConfig
-from .geometry import PANEL_HEIGHT, Rect, bubble_rect, expanded_rect, snap
+from .geometry import BAR, GRIP, ICON, ICON_GAP, PANEL_HEIGHT, Rect, bar_height, bar_rect, expanded_rect, snap
 from .registry import LoadedTool
 from .tool import Tool
 
 DRAG_THRESHOLD = 4
-ACCENT = QColor(88, 166, 255)
 
 STYLE = """
 QWidget { color: #e6edf3; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
+QLabel#grip { color: #8b949e; font-size: 12px; }
+QToolButton#appIcon { border: none; border-radius: 8px; font-size: 13px; font-weight: 600; }
+QToolButton#appIcon:hover { background: rgba(255, 255, 255, 40); }
+QToolButton#appIcon:checked { background: rgba(88, 166, 255, 110); }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; }
 QPushButton#headerButton { background: transparent; border: none; border-radius: 6px; padding: 2px 6px;
-                           font-size: 14px; }
+                           font-size: 13px; }
 QPushButton#headerButton:hover { background: rgba(255, 255, 255, 40); }
 QPushButton#headerButton:checked { background: rgba(88, 166, 255, 90); }
-QFrame#card { background: rgba(255, 255, 255, 18); border: 1px solid rgba(255, 255, 255, 28); border-radius: 12px; }
-QLabel#cardTitle { font-size: 12px; font-weight: 600; color: #9da7b3; text-transform: uppercase; }
+QFrame#card { background: rgba(255, 255, 255, 14); border: 1px solid rgba(255, 255, 255, 24); border-radius: 10px; }
 QLabel#cardError { color: #f85149; }
 QPushButton { background: rgba(255, 255, 255, 30); border: 1px solid rgba(255, 255, 255, 40);
               border-radius: 8px; padding: 6px 10px; }
@@ -45,25 +48,22 @@ QPushButton[active="true"] { background: rgba(88, 166, 255, 70); border-color: #
 QProgressBar { background: rgba(255, 255, 255, 20); border: none; border-radius: 4px; height: 8px;
                text-align: right; font-size: 11px; }
 QProgressBar::chunk { background: #58a6ff; border-radius: 4px; }
-QScrollArea { border: none; }
 """
 
 
 class Card(QFrame):
-    def __init__(self, title: str, body: QWidget | None, error: str | None = None):
+    def __init__(self, body: QWidget | None, error: str | None = None):
         super().__init__()
         self.setObjectName("card")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
-        header = QLabel(title)
-        header.setObjectName("cardTitle")
-        layout.addWidget(header)
         if body is not None:
             layout.addWidget(body)
         self.error_label = QLabel("")
         self.error_label.setObjectName("cardError")
         self.error_label.setWordWrap(True)
         layout.addWidget(self.error_label)
+        layout.addStretch(1)
         self.show_error(error or "")
 
     def show_error(self, text: str) -> None:
@@ -72,16 +72,15 @@ class Card(QFrame):
 
 
 class Panel(QWidget):
-    """Círculo de 50 px pegado a un borde que se expande en un panel con herramientas."""
+    """Barra chica pegada a un borde con un ícono por app; clic en un ícono despliega esa app."""
 
     def __init__(
         self,
         config: DockConfig,
         loaded: list[LoadedTool],
         screen_area: Callable[[], Rect],
-        animation_ms: int = 220,
+        animation_ms: int = 180,
         hide_delay_ms: int = 700,
-        hover_delay_ms: int = 350,
         panel_height: int = PANEL_HEIGHT,
         fit_content: bool = True,
         on_config_change: Callable[[DockConfig], None] = lambda config: None,
@@ -92,7 +91,6 @@ class Panel(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumSize(1, 1)
         self.setStyleSheet(STYLE)
-        self.setToolTip("IPDock: pasá el mouse para abrir, arrastrá para mover, clic derecho para el menú")
         self.config = config
         self._area = screen_area
         self.animation_ms = animation_ms
@@ -105,56 +103,62 @@ class Panel(QWidget):
         self.dragging = False
         self._press_global: QPoint | None = None
         self._press_offset = QPoint()
+        self.current: str | None = None
         self.cards: dict[str, Card] = {}
+        self.tool_buttons: dict[str, QToolButton] = {}
+        self._titles: dict[str, str] = {}
         self.timers: list[QTimer] = []
+        self.bar_h = bar_height(len(loaded))
 
-        outer = QVBoxLayout(self)
-        outer.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
-        outer.setContentsMargins(14, 10, 14, 14)
-        self.body = QWidget()
-        body_layout = QVBoxLayout(self.body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        self.header = self._build_header()
-        body_layout.addLayout(self.header)
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        content = QWidget()
-        cards_layout = QVBoxLayout(content)
-        cards_layout.setContentsMargins(0, 0, 0, 0)
-        cards_layout.setSpacing(10)
-        if not loaded:
-            cards_layout.addWidget(QLabel("Sin herramientas. Edita dock.json."))
+        self.bar = self._build_bar()
+        self.flyout = self._build_flyout()
         for item in loaded:
-            card = self._build_card(item)
-            self.cards[item.name] = card
-            cards_layout.addWidget(card)
-        cards_layout.addStretch(1)
-        self.scroll.setWidget(content)
-        body_layout.addWidget(self.scroll)
-        outer.addWidget(self.body)
+            self._add_tool(item)
+        self.bar.layout().addStretch(1)
 
-        self.hide_timer = self._single_shot(hide_delay_ms, self.conceal)
-        self.hover_timer = self._single_shot(hover_delay_ms, self.reveal)
+        root = QHBoxLayout(self)
+        root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        self._arrange()
+
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.setInterval(hide_delay_ms)
+        self.hide_timer.timeout.connect(self.conceal)
         self.animation = QPropertyAnimation(self, b"geometry", self)
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.animation.finished.connect(self._after_animation)
 
-        self.revealed = config.pinned
-        self.body.setVisible(self.revealed)
-        self.setGeometry(QRect(*self._target(self.revealed)))
+        self.flyout.setVisible(False)
+        self.setGeometry(QRect(*self._target(False)))
+        if config.pinned and self.cards:
+            self.reveal()
 
-    def _single_shot(self, interval: int, slot: Callable[[], None]) -> QTimer:
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.setInterval(interval)
-        timer.timeout.connect(slot)
-        return timer
+    # --- construcción -----------------------------------------------------------------------
 
-    def _build_header(self) -> QHBoxLayout:
+    def _build_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setFixedWidth(BAR)
+        layout = QVBoxLayout(bar)
+        layout.setContentsMargins((BAR - ICON) // 2, 0, (BAR - ICON) // 2, 4)
+        layout.setSpacing(ICON_GAP)
+        grip = QLabel("⋯")
+        grip.setObjectName("grip")
+        grip.setFixedHeight(GRIP)
+        grip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grip.setToolTip("Arrastrá para mover · clic derecho para el menú")
+        layout.addWidget(grip)
+        return bar
+
+    def _build_flyout(self) -> QWidget:
+        flyout = QWidget()
+        flyout.setFixedWidth(self.config.width)
+        layout = QVBoxLayout(flyout)
+        layout.setContentsMargins(12, 8, 8, 12)
         header = QHBoxLayout()
-        title = QLabel("IPDock")
-        title.setObjectName("panelTitle")
+        self.title = QLabel("")
+        self.title.setObjectName("panelTitle")
         self.pin_button = QPushButton("📌")
         self.pin_button.setObjectName("headerButton")
         self.pin_button.setCheckable(True)
@@ -165,21 +169,42 @@ class Panel(QWidget):
         self.close_button.setObjectName("headerButton")
         self.close_button.setToolTip("Cerrar IPDock")
         self.close_button.clicked.connect(lambda: self.on_close())
-        header.addWidget(title)
+        header.addWidget(self.title)
         header.addStretch(1)
         header.addWidget(self.pin_button)
         header.addWidget(self.close_button)
-        return header
+        self.header = header
+        layout.addLayout(header)
+        self.stack = QStackedWidget()
+        layout.addWidget(self.stack)
+        return flyout
 
-    def _build_card(self, item: LoadedTool) -> Card:
-        if item.tool is None:
-            return Card(item.name, None, item.error)
+    def _add_tool(self, item: LoadedTool) -> None:
         tool = item.tool
-        try:
-            body = tool.create_widget()
-        except Exception as exc:  # noqa: BLE001
-            return Card(tool.title or item.name, None, f"{type(exc).__name__}: {exc}")
-        card = Card(tool.title or item.name, body)
+        if tool is None:
+            card, title, icon = Card(None, item.error), item.name, "!"
+        else:
+            title, icon = tool.title or item.name, tool.icon
+            try:
+                card = Card(tool.create_widget())
+            except Exception as exc:  # noqa: BLE001
+                card, icon = Card(None, f"{type(exc).__name__}: {exc}"), "!"
+            else:
+                self._start_refresh(tool, card)
+        self.cards[item.name] = card
+        self._titles[item.name] = title
+        self.stack.addWidget(card)
+        button = QToolButton()
+        button.setObjectName("appIcon")
+        button.setText(icon)
+        button.setToolTip(title)
+        button.setCheckable(True)
+        button.setFixedSize(ICON, ICON)
+        button.clicked.connect(lambda _checked=False, name=item.name: self._icon_clicked(name))
+        self.tool_buttons[item.name] = button
+        self.bar.layout().addWidget(button)
+
+    def _start_refresh(self, tool: Tool, card: Card) -> None:
         self._safe_refresh(tool, card)
         if tool.refresh_ms > 0:
             timer = QTimer(self)
@@ -187,7 +212,6 @@ class Panel(QWidget):
             timer.timeout.connect(lambda t=tool, c=card: self._safe_refresh(t, c))
             timer.start()
             self.timers.append(timer)
-        return card
 
     @staticmethod
     def _safe_refresh(tool: Tool, card: Card) -> None:
@@ -196,36 +220,83 @@ class Panel(QWidget):
         except Exception as exc:  # noqa: BLE001
             card.show_error(f"Error al refrescar: {exc}")
 
-    # --- geometría y animación -------------------------------------------------------------
+    def _arrange(self) -> None:
+        """La barra queda del lado del borde de la pantalla y la app se abre hacia adentro."""
+        root = self.layout()
+        root.removeWidget(self.bar)
+        root.removeWidget(self.flyout)
+        order = (self.flyout, self.bar) if self.config.edge == "right" else (self.bar, self.flyout)
+        for widget in order:
+            root.addWidget(widget)
+
+    # --- abrir / cerrar apps ----------------------------------------------------------------
+
+    def _icon_clicked(self, name: str) -> None:
+        if self.revealed and self.current == name:
+            self.conceal()
+            self._sync_buttons()
+            return
+        self.open_tool(name)
+
+    def open_tool(self, name: str) -> None:
+        self.hide_timer.stop()
+        self.current = name
+        self.stack.setCurrentWidget(self.cards[name])
+        self.title.setText(self._titles[name])
+        self._move_to(True)
+        self._sync_buttons()
+
+    def reveal(self) -> None:
+        if self.cards:
+            self.open_tool(self.current or next(iter(self.cards)))
+
+    def conceal(self) -> None:
+        if self.revealed and not self.config.pinned:
+            self._move_to(False)
+            self._sync_buttons()
+
+    def _sync_buttons(self) -> None:
+        for name, button in self.tool_buttons.items():
+            button.setChecked(self.revealed and name == self.current)
+
+    def toggle_pin(self) -> None:
+        self._save(pinned=not self.config.pinned)
+        self.pin_button.setChecked(self.config.pinned)
+        if self.config.pinned and not self.revealed:
+            self.reveal()
+
+    def _save(self, **changes) -> None:
+        self.config = replace(self.config, **changes)
+        self.on_config_change(self.config)
+
+    # --- geometría y animación --------------------------------------------------------------
+
+    def _content_height(self) -> int:
+        if not self.fit_content or self.current is None:
+            return self.panel_height
+        margins = self.flyout.layout().contentsMargins()
+        needed = (
+            margins.top() + margins.bottom()
+            + self.header.sizeHint().height()
+            + self.flyout.layout().spacing()
+            + self.cards[self.current].sizeHint().height()
+        )
+        return min(self.panel_height, needed)
 
     def _target(self, revealed: bool) -> Rect:
         area = self._area()
         if revealed:
-            return expanded_rect(area, self.config.edge, self.config.width, self.config.position,
-                                 height=self._expanded_height())
-        return bubble_rect(area, self.config.edge, self.config.position)
-
-    def _expanded_height(self) -> int:
-        if not self.fit_content:
-            return self.panel_height
-        margins = self.layout().contentsMargins()
-        needed = (
-            margins.top() + margins.bottom()
-            + self.header.sizeHint().height()
-            + self.body.layout().spacing()
-            + self.scroll.widget().sizeHint().height()
-            + 4
-        )
-        return min(self.panel_height, needed)
+            return expanded_rect(area, self.config.edge, self.config.position, self.bar_h,
+                                 self.config.width, self._content_height())
+        return bar_rect(area, self.config.edge, self.config.position, self.bar_h)
 
     def _move_to(self, revealed: bool) -> None:
         self.revealed = revealed
         if revealed:
-            self.body.setVisible(True)
-        self._update_backdrop()
+            self.flyout.setVisible(True)
         target = QRect(*self._target(revealed))
         self.animation.stop()
-        if self.animation_ms <= 0:
+        if self.animation_ms <= 0 or not self.isVisible():
             self.setGeometry(target)
             self._after_animation()
             return
@@ -236,44 +307,18 @@ class Panel(QWidget):
 
     def _after_animation(self) -> None:
         if not self.revealed:
-            self.body.setVisible(False)
+            self.flyout.setVisible(False)
         self.update()
-
-    def _update_backdrop(self) -> None:
-        if self.config.backdrop != "acrylic" or not self.testAttribute(Qt.WidgetAttribute.WA_WState_Created):
-            self.backdrop_active = False
-            return
-        applied = apply_backdrop(int(self.winId()), enabled=self.revealed)
-        self.backdrop_active = applied and self.revealed
-
-    def reveal(self) -> None:
-        self.hide_timer.stop()
-        self.hover_timer.stop()
-        if not self.revealed:
-            self._move_to(True)
-
-    def conceal(self) -> None:
-        if self.revealed and not self.config.pinned:
-            self._move_to(False)
 
     def reposition(self, *_args) -> None:
         self.animation.stop()
         self.setGeometry(QRect(*self._target(self.revealed)))
 
-    def _save(self, **changes) -> None:
-        self.config = replace(self.config, **changes)
-        self.on_config_change(self.config)
-
-    def toggle_pin(self) -> None:
-        self._save(pinned=not self.config.pinned)
-        self.pin_button.setChecked(self.config.pinned)
-        if self.config.pinned:
-            self.reveal()
-
-    # --- arrastre del círculo ----------------------------------------------------------------
+    # --- arrastre de la barra ---------------------------------------------------------------
 
     def begin_drag(self, global_pos: QPoint) -> None:
-        self.hover_timer.stop()
+        if self.revealed:
+            return
         self._press_global = QPoint(global_pos)
         self._press_offset = global_pos - self.pos()
         self.dragging = False
@@ -295,10 +340,10 @@ class Panel(QWidget):
         self._press_global = None
         self.dragging = False
         if not was_dragging:
-            self.reveal()
             return
-        edge, position = snap(self._area(), self.x(), self.y())
+        edge, position = snap(self._area(), self.x(), self.y(), self.bar_h)
         self._save(edge=edge, position=position)
+        self._arrange()
         self._move_to(False)
 
     # --- eventos ----------------------------------------------------------------------------
@@ -317,7 +362,7 @@ class Panel(QWidget):
         self.build_menu().exec(event.globalPos())
 
     def mousePressEvent(self, event) -> None:
-        if not self.revealed and event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self.begin_drag(event.globalPosition().toPoint())
         super().mousePressEvent(event)
 
@@ -332,36 +377,29 @@ class Panel(QWidget):
 
     def enterEvent(self, event) -> None:
         self.hide_timer.stop()
-        if not self.revealed and self._press_global is None:
-            self.hover_timer.start()
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.hover_timer.stop()
         if self.revealed and not self.config.pinned:
             self.hide_timer.start()
         super().leaveEvent(event)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self._update_backdrop()
+        if self.config.backdrop == "acrylic" and not self.backdrop_active:
+            self.backdrop_active = apply_backdrop(int(self.winId()))
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        if not self.revealed and not self.animation.state() == QPropertyAnimation.State.Running:
-            painter.setBrush(ACCENT)
-            painter.drawEllipse(self.rect().adjusted(1, 1, -1, -1))
-            painter.setPen(QColor(255, 255, 255))
-            painter.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "IP")
-            return
-        if self.backdrop_active:
-            painter.setBrush(QColor(16, 18, 24, 110))
-        else:
-            painter.setBrush(QColor(22, 24, 30, 235))
-        painter.drawRoundedRect(self.rect(), 14, 14)
+        alpha = 120 if self.backdrop_active else 235
+        painter.setBrush(QColor(22, 24, 30, alpha))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 10, 10)
+        if self.revealed:
+            x = self.bar.geometry().left() if self.config.edge == "right" else self.bar.geometry().right()
+            painter.setPen(QPen(QColor(255, 255, 255, 30), 1))
+            painter.drawLine(x, 8, x, self.height() - 8)
 
 
 def primary_area() -> Rect:

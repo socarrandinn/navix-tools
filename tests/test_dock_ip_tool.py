@@ -160,3 +160,7 @@ def test_refreshes_again_after_switch_settles(qtbot):
     tool.switch("dhcp")
     assert len(reads) == 2
     qtbot.waitUntil(lambda: len(reads) == 3, timeout=1000)
+
+
+def test_ip_tool_has_its_own_bar_icon():
+    assert IpSwitchTool.icon == "🌐"

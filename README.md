@@ -56,11 +56,17 @@ Editar `C:\ProgramData\ipswitch\config.json` con un editor abierto como administ
 .\.venv\Scripts\pythonw -m dock
 ```
 
-- Círculo azul "IP" de 50 px pegado al borde de la pantalla.
-- Pasá el mouse (o hacé clic) para abrir el panel; se cierra solo al sacar el mouse.
-- Arrastrá el círculo para moverlo: al soltarlo se pega al borde izquierdo o derecho más cercano.
-- 📌 deja el panel fijo abierto; ✕ cierra la app. Clic derecho en el círculo: Fijar panel / Salir.
-- El botón del modo activo (DHCP o perfil) aparece resaltado.
+Barra chica (40 px) pegada al borde de la pantalla, estilo dock de mac/linux, con un ícono por micro-app:
+
+- Clic en un ícono despliega esa app al lado de la barra; clic de nuevo la cierra; clic en otro ícono cambia de app.
+- Se cierra sola al sacar el mouse, salvo que esté fijada con 📌. ✕ cierra IPDock.
+- Arrastrá la barra (desde el `⋯` o el fondo) para moverla: al soltarla se pega al borde izquierdo o derecho más cercano.
+- Clic derecho en la barra: Fijar panel / Salir.
+- En la app de IP, el botón del modo activo (DHCP o perfil) aparece resaltado.
+
+Agregar una app: crear `dock/tools/<nombre>.py` con una clase que herede `dock.tool.Tool`
+(`title`, `icon`, `refresh_ms`, `create_widget()`, `refresh()`) y `create_tool()`, y sumar
+`<nombre>` a `tools` en `dock.json`.
 
 Config en `%APPDATA%\ipdock\dock.json` (se guarda solo al mover o fijar):
 

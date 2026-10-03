@@ -6,18 +6,18 @@ from PySide6.QtWidgets import QLabel
 
 from dock.backdrop import apply_backdrop
 from dock.config import DockConfig
+from dock.geometry import BAR, bar_height
 from dock.panel import Panel
 from dock.registry import LoadedTool
 from dock.single import acquire_single_instance
 from dock.tool import Tool
 
 AREA = (0, 0, 1920, 1040)
-BUBBLE_RIGHT = (1858, 495, 50, 50)
-EXPANDED_RIGHT = (1588, 320, 320, 400)
 
 
 class CountingTool(Tool):
     title = "Contador"
+    icon = "C"
     refresh_ms = 1000
 
     def __init__(self):
@@ -28,6 +28,11 @@ class CountingTool(Tool):
 
     def refresh(self):
         self.refreshes += 1
+
+
+class OtherTool(CountingTool):
+    title = "Otra"
+    icon = "O"
 
 
 class FailingRefreshTool(CountingTool):
@@ -42,12 +47,14 @@ class FailingWidgetTool(CountingTool):
         raise ValueError("widget roto")
 
 
-def make_panel(qtbot, loaded, config=None, area=AREA, **kwargs):
+def make_panel(qtbot, loaded=None, config=None, area=AREA, **kwargs):
     state = {"area": area, "saved": [], "closed": 0}
 
     def on_close():
         state["closed"] += 1
 
+    if loaded is None:
+        loaded = [LoadedTool("contador", CountingTool(), None), LoadedTool("otra", OtherTool(), None)]
     kwargs.setdefault("fit_content", False)
     panel = Panel(config or DockConfig(backdrop="none"), loaded, lambda: state["area"], animation_ms=0,
                   panel_height=400, on_config_change=state["saved"].append, on_close=on_close, **kwargs)
@@ -68,65 +75,92 @@ def leave(panel):
     panel.leaveEvent(QEvent(QEvent.Type.Leave))
 
 
-def test_starts_collapsed_as_50px_bubble(qtbot):
-    panel, _ = make_panel(qtbot, [])
+def test_starts_collapsed_as_small_bar_with_one_icon_per_app(qtbot):
+    panel, _ = make_panel(qtbot)
+    x, y, w, h = rect(panel)
+    assert (x, w, h) == (1920 - 12 - BAR, BAR, bar_height(2))
     assert panel.revealed is False
-    assert rect(panel) == BUBBLE_RIGHT
-    assert panel.body.isHidden()
+    assert panel.flyout.isHidden()
+    assert [b.text() for b in panel.tool_buttons.values()] == ["C", "O"]
+    assert panel.tool_buttons["contador"].toolTip() == "Contador"
 
 
-def test_reveal_and_conceal(qtbot):
-    panel, _ = make_panel(qtbot, [])
-    panel.reveal()
-    assert rect(panel) == EXPANDED_RIGHT
-    assert not panel.body.isHidden()
-    panel.conceal()
-    assert rect(panel) == BUBBLE_RIGHT
+def test_click_icon_opens_that_app_next_to_bar(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.tool_buttons["otra"].click()
+    assert panel.revealed is True
+    assert panel.current == "otra"
+    assert panel.stack.currentWidget() is panel.cards["otra"]
+    assert panel.title.text() == "Otra"
+    x, y, w, h = rect(panel)
+    assert (x, w, h) == (1920 - 12 - BAR - 320, BAR + 320, 400)
+    assert panel.tool_buttons["otra"].isChecked()
+    assert not panel.tool_buttons["contador"].isChecked()
 
 
-def test_hover_expands_after_short_delay(qtbot):
-    panel, _ = make_panel(qtbot, [], hover_delay_ms=10)
-    enter(panel)
+def test_click_same_icon_collapses(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.tool_buttons["otra"].click()
+    panel.tool_buttons["otra"].click()
     assert panel.revealed is False
-    qtbot.waitUntil(lambda: panel.revealed, timeout=1000)
+    assert rect(panel)[2] == BAR
+    assert not panel.tool_buttons["otra"].isChecked()
 
 
-def test_press_on_bubble_cancels_hover_expand(qtbot):
-    panel, _ = make_panel(qtbot, [], hover_delay_ms=30)
-    enter(panel)
-    panel.begin_drag(QPoint(1880, 520))
-    qtbot.wait(80)
-    assert panel.revealed is False
+def test_click_other_icon_switches_app_without_collapsing(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.tool_buttons["contador"].click()
+    panel.tool_buttons["otra"].click()
+    assert panel.revealed is True
+    assert panel.current == "otra"
+
+
+def test_bar_stays_on_screen_edge_side(qtbot):
+    right, _ = make_panel(qtbot)
+    right.open_tool("contador")
+    right.layout().activate()
+    assert right.bar.geometry().x() > right.flyout.geometry().x()
+    left, _ = make_panel(qtbot, config=DockConfig(backdrop="none", edge="left"))
+    left.open_tool("contador")
+    left.layout().activate()
+    assert left.bar.geometry().x() < left.flyout.geometry().x()
 
 
 def test_leave_collapses_after_delay(qtbot):
-    panel, _ = make_panel(qtbot, [], hide_delay_ms=10)
-    panel.reveal()
+    panel, _ = make_panel(qtbot, hide_delay_ms=10)
+    panel.open_tool("contador")
     leave(panel)
     qtbot.waitUntil(lambda: panel.revealed is False, timeout=1000)
 
 
 def test_enter_cancels_pending_collapse(qtbot):
-    panel, _ = make_panel(qtbot, [], hide_delay_ms=50)
-    panel.reveal()
+    panel, _ = make_panel(qtbot, hide_delay_ms=50)
+    panel.open_tool("contador")
     leave(panel)
     enter(panel)
     qtbot.wait(120)
     assert panel.revealed is True
 
 
-def test_pinned_config_starts_expanded_and_ignores_leave(qtbot):
-    panel, _ = make_panel(qtbot, [], config=DockConfig(backdrop="none", pinned=True), hide_delay_ms=10)
+def test_hover_alone_does_not_expand(qtbot):
+    panel, _ = make_panel(qtbot)
+    enter(panel)
+    qtbot.wait(50)
+    assert panel.revealed is False
+
+
+def test_pinned_config_starts_with_first_app_open_and_ignores_leave(qtbot):
+    panel, _ = make_panel(qtbot, config=DockConfig(backdrop="none", pinned=True), hide_delay_ms=10)
     assert panel.revealed is True
-    assert rect(panel) == EXPANDED_RIGHT
+    assert panel.current == "contador"
     leave(panel)
     qtbot.wait(60)
     assert panel.revealed is True
 
 
 def test_toggle_pin_saves_config(qtbot):
-    panel, state = make_panel(qtbot, [])
-    panel.reveal()
+    panel, state = make_panel(qtbot)
+    panel.open_tool("contador")
     panel.toggle_pin()
     assert state["saved"][-1].pinned is True
     assert panel.pin_button.isChecked()
@@ -134,9 +168,10 @@ def test_toggle_pin_saves_config(qtbot):
     assert state["saved"][-1].pinned is False
 
 
-def test_drag_to_left_snaps_and_saves(qtbot):
-    panel, state = make_panel(qtbot, [])
-    panel.begin_drag(QPoint(1880, 520))
+def test_drag_bar_to_left_snaps_and_saves(qtbot):
+    panel, state = make_panel(qtbot)
+    start = QPoint(1890, 500)
+    panel.begin_drag(start)
     panel.drag_to(QPoint(400, 300))
     assert panel.dragging is True
     panel.end_drag(QPoint(400, 300))
@@ -144,50 +179,62 @@ def test_drag_to_left_snaps_and_saves(qtbot):
     assert saved.edge == "left"
     assert 0.0 < saved.position < 0.5
     x, y, w, h = rect(panel)
-    assert (x, w, h) == (12, 50, 50)
+    assert (x, w) == (12, BAR)
     assert panel.revealed is False
 
 
-def test_small_move_is_a_click_that_expands(qtbot):
-    panel, state = make_panel(qtbot, [])
-    panel.begin_drag(QPoint(1880, 520))
-    panel.drag_to(QPoint(1882, 521))
-    panel.end_drag(QPoint(1882, 521))
+def test_small_move_is_not_a_drag(qtbot):
+    panel, state = make_panel(qtbot)
+    before = rect(panel)
+    panel.begin_drag(QPoint(1890, 500))
+    panel.drag_to(QPoint(1892, 501))
+    panel.end_drag(QPoint(1892, 501))
     assert state["saved"] == []
-    assert panel.revealed is True
+    assert rect(panel) == before
 
 
-def test_expanded_panel_opens_on_dragged_side(qtbot):
-    panel, _ = make_panel(qtbot, [])
-    panel.begin_drag(QPoint(1880, 520))
-    panel.drag_to(QPoint(100, 520))
-    panel.end_drag(QPoint(100, 520))
-    panel.reveal()
+def test_app_opens_inward_after_moving_to_left(qtbot):
+    panel, _ = make_panel(qtbot)
+    panel.begin_drag(QPoint(1890, 500))
+    panel.drag_to(QPoint(100, 500))
+    panel.end_drag(QPoint(100, 500))
+    panel.open_tool("contador")
     assert rect(panel)[0] == 12
+    panel.layout().activate()
+    assert panel.bar.geometry().x() < panel.flyout.geometry().x()
 
 
 def test_close_button_calls_on_close(qtbot):
-    panel, state = make_panel(qtbot, [])
-    panel.reveal()
+    panel, state = make_panel(qtbot)
+    panel.open_tool("contador")
     panel.close_button.click()
     assert state["closed"] == 1
 
 
 def test_context_menu_has_pin_and_close(qtbot):
-    panel, _ = make_panel(qtbot, [])
+    panel, _ = make_panel(qtbot)
     texts = [action.text() for action in panel.build_menu().actions() if action.text()]
     assert texts == ["Fijar panel", "Salir"]
 
 
 def test_reposition_follows_area_change(qtbot):
-    panel, state = make_panel(qtbot, [])
-    panel.reveal()
+    panel, state = make_panel(qtbot)
+    panel.open_tool("contador")
     state["area"] = (0, 0, 1280, 720)
     panel.reposition()
-    assert rect(panel) == (948, 160, 320, 400)
+    x, y, w, h = rect(panel)
+    assert (x, w) == (1280 - 12 - BAR - 320, BAR + 320)
+    assert y + h <= 720 - 12
 
 
-def test_cards_and_initial_refresh(qtbot):
+def test_expanded_height_fits_small_content(qtbot):
+    panel, _ = make_panel(qtbot, fit_content=True)
+    panel.open_tool("contador")
+    h = rect(panel)[3]
+    assert bar_height(2) <= h < 400
+
+
+def test_initial_refresh_and_timers(qtbot):
     tool = CountingTool()
     panel, _ = make_panel(qtbot, [LoadedTool("contador", tool, None)])
     assert list(panel.cards) == ["contador"]
@@ -195,7 +242,7 @@ def test_cards_and_initial_refresh(qtbot):
     assert panel.timers[0].interval() == 1000
 
 
-def test_failing_tool_shows_error_card_and_others_work(qtbot):
+def test_failing_tools_get_error_cards_and_others_work(qtbot):
     good = CountingTool()
     panel, _ = make_panel(qtbot, [
         LoadedTool("roto", None, "ModuleNotFoundError: x"),
@@ -207,7 +254,14 @@ def test_failing_tool_shows_error_card_and_others_work(qtbot):
     assert "sin red" in panel.cards["falla"].error_label.text()
     assert "widget roto" in panel.cards["widget"].error_label.text()
     assert panel.cards["bueno"].error_label.text() == ""
+    assert panel.tool_buttons["roto"].text() == "!"
     assert good.refreshes == 1
+
+
+def test_no_tools_still_shows_bar(qtbot):
+    panel, _ = make_panel(qtbot, [])
+    assert rect(panel)[2] == BAR
+    assert panel.tool_buttons == {}
 
 
 def test_single_instance(qapp):
@@ -223,11 +277,3 @@ def test_single_instance(qapp):
 
 def test_apply_backdrop_invalid_window_returns_false():
     assert apply_backdrop(0) is False
-
-
-def test_expanded_height_fits_small_content(qtbot):
-    panel, _ = make_panel(qtbot, [LoadedTool("contador", CountingTool(), None)], fit_content=True)
-    panel.reveal()
-    x, y, w, h = rect(panel)
-    assert 80 < h < 400
-    assert w == 320
