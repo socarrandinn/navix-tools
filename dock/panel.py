@@ -15,8 +15,9 @@ from PySide6.QtCore import (
     Qt,
     QTimer,
     QVariantAnimation,
+    Signal,
 )
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QBoxLayout,
@@ -65,7 +66,9 @@ QT_MAX = 16777215
 EXPANDED_RADIUS = R_SURFACE
 HEADER_BUTTON = 28  # pin y cerrar: botones de ícono redondos
 APP_ICON = 15       # tamaño del dibujo dentro de cada botón de la barra
-APP_ICON_HOVER = 19  # al pasar el mouse el ícono crece
+APP_ICON_SWELL = 26  # al pasar el mouse el ícono crece y sale del grosor de la barra
+SWELL = 14           # cuánto se hincha la barra hacia adentro bajo el ícono
+SWELL_MS = 160
 DOT_STEP, DOT_RADIUS = 5.0, 1.4
 WOBBLE_PX = 6.0  # amplitud máxima de la onda líquida
 HOVER_JIGGLE = 0.4
@@ -76,7 +79,6 @@ NECK_REST = 14        # grosor del cuello que mantiene la app unida a la barra
 STYLE = themed("""
 QWidget { color: #f0f4f8; font-family: 'Segoe UI'; font-size: 13px; background: transparent; }
 QToolButton#appIcon { background: transparent; border: none; border-radius: @iconpx; font-size: 14px; font-weight: 600; }
-QToolButton#appIcon:hover { background: rgba(255, 255, 255, 46); }
 QToolButton#appIcon:checked { background: rgba(255, 255, 255, 64); }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; }
 QPushButton#headerButton { background: transparent; border: none; border-radius: @headerpx; padding: 0px; }
@@ -148,30 +150,30 @@ class Grip(QWidget):
 
 
 class AppIconButton(QToolButton):
-    """Botón de ícono de la barra: al pasar el mouse el dibujo crece suavemente."""
+    """Botón de ícono de la barra. Al pasar el mouse avisa al panel, que hincha la barra y
+    dibuja el ícono agrandado por encima del bulto (``magnified`` oculta el dibujo propio)."""
+
+    hovered = Signal(bool)
 
     def __init__(self):
         super().__init__()
-        self._scale = QVariantAnimation(self)
-        self._scale.setDuration(120)
-        self._scale.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._scale.valueChanged.connect(lambda value: self.setIconSize(QSize(round(value), round(value))))
+        self.magnified = False
 
-    def _animate_to(self, size: int) -> None:
-        self._scale.stop()
-        self._scale.setStartValue(float(self.iconSize().width()))
-        self._scale.setEndValue(float(size))
-        self._scale.start()
+    def set_magnified(self, magnified: bool) -> None:
+        self.magnified = magnified
+        self.update()
 
     def enterEvent(self, event) -> None:
-        if not self.icon().isNull():
-            self._animate_to(APP_ICON_HOVER)
+        self.hovered.emit(True)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        if not self.icon().isNull():
-            self._animate_to(APP_ICON)
+        self.hovered.emit(False)
         super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        if not self.magnified:
+            super().paintEvent(event)
 
 
 class Card(QFrame):
@@ -239,6 +241,11 @@ class Panel(QWidget):
         self._press_global: QPoint | None = None
         self._press_offset = QPoint()
         self._path = QPainterPath()
+        self.swell = 0.0        # 0 = barra normal, 1 = hinchada bajo el ícono con el mouse
+        self._swell_at = 0.0    # centro del bulto, a lo largo de la barra (coordenadas de la barra)
+        self._swell_target: AppIconButton | None = None  # ícono con el mouse encima
+        self._swell_shown: AppIconButton | None = None   # ícono agrandado que dibuja el panel
+        self._swell_room = False  # la ventana tiene lugar extra hacia adentro para el bulto
         self.current: str | None = None
         self.cards: dict[str, Card] = {}
         self.tool_buttons: dict[str, QToolButton] = {}
@@ -255,13 +262,14 @@ class Panel(QWidget):
         self.settings_button.setObjectName("appIcon")
         self.settings_button.setToolTip("Menú")
         self.settings_button.setFixedSize(ICON, ICON)
-        gear = svg_icon("settings", color="#c9d1d9", size=APP_ICON_HOVER)
+        gear = svg_icon("settings", color="#c9d1d9", size=APP_ICON_SWELL)
         if gear is not None:
             self.settings_button.setIcon(gear)
             self.settings_button.setIconSize(QSize(APP_ICON, APP_ICON))
         else:
             self.settings_button.setText("⚙")
         self.settings_button.clicked.connect(self._open_settings_menu)
+        self.settings_button.hovered.connect(lambda on, b=self.settings_button: self._icon_hover(b, on))
         self.icons_box.layout().addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         # La barra vive en una columna con un espaciador: así, con la app abierta, la barra
@@ -297,6 +305,14 @@ class Panel(QWidget):
         self.wobble_anim = QVariantAnimation(self)
         self.wobble_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.wobble_anim.valueChanged.connect(self._on_wobble)
+        self.swell_anim = QVariantAnimation(self)
+        self.swell_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.swell_anim.valueChanged.connect(lambda value: self._set_swell(float(value)))
+        self.swell_anim.finished.connect(self._swell_finished)
+        self.slide_anim = QVariantAnimation(self)
+        self.slide_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.slide_anim.valueChanged.connect(self._on_slide)
+        self.setMouseTracking(True)
 
         self.flyout.setVisible(False)
         self._set_rect(self._target(False))
@@ -370,7 +386,7 @@ class Panel(QWidget):
         self.stack.addWidget(card)
         button = AppIconButton()
         button.setObjectName("appIcon")
-        svg = svg_icon(icon, size=APP_ICON_HOVER)
+        svg = svg_icon(icon, size=APP_ICON_SWELL)
         if svg is not None:
             button.setIcon(svg)
             button.setIconSize(QSize(APP_ICON, APP_ICON))
@@ -380,6 +396,7 @@ class Panel(QWidget):
         button.setCheckable(True)
         button.setFixedSize(ICON, ICON)
         button.clicked.connect(lambda _checked=False, name=item.name: self._icon_clicked(name))
+        button.hovered.connect(lambda on, b=button: self._icon_hover(b, on))
         self.tool_buttons[item.name] = button
         self.icons_box.layout().addWidget(button, 0, Qt.AlignmentFlag.AlignCenter)
 
@@ -532,9 +549,12 @@ class Panel(QWidget):
         if revealed:
             return expanded_rect(area, self.config.edge, self.config.position, self.bar_len,
                                  self.config.width, self._content_height())
+        if self._swell_room:
+            return stretched_rect(area, self.config.edge, self.config.position, self.bar_len, SWELL)
         return bar_rect(area, self.config.edge, self.config.position, self.bar_len)
 
     def _set_rect(self, rect: Rect) -> None:
+        self._apply_margins()
         self.setGeometry(QRect(*rect))
         self._sync_bar_offset()
         self._refresh_shape()
@@ -555,7 +575,7 @@ class Panel(QWidget):
 
     def bar_shape_rect(self) -> QRectF:
         """Rectángulo de la barra en coordenadas de la ventana."""
-        if self.flyout.isHidden():
+        if self.flyout.isHidden() and not self._swell_room:
             return QRectF(0, 0, self.width(), self.height())
         top_left = self.bar.mapTo(self, QPoint(0, 0))
         return QRectF(top_left.x(), top_left.y(), self.bar.width(), self.bar.height())
@@ -580,12 +600,13 @@ class Panel(QWidget):
         if self._pull > 0:
             self._path = self._stretched_path(width, height)
             return
-        if self.flyout.isHidden():
-            self._path = droplet_path(width, height, edge, BAR / 2, FLARE, wobble=self.wobble, phase=self._phase)
-            return
         bar = self.bar_shape_rect()
-        path = droplet_path(bar.width(), bar.height(), edge, BAR / 2, FLARE,
-                            wobble=self.wobble, phase=self._phase).translated(bar.topLeft())
+        path = droplet_path(bar.width(), bar.height(), edge, BAR / 2, FLARE, wobble=self.wobble,
+                            phase=self._phase, bump=self.swell * SWELL,
+                            bump_at=self._swell_at).translated(bar.topLeft())
+        if self.flyout.isHidden():
+            self._path = path
+            return
         growth = QEasingCurve(QEasingCurve.Type.OutBack).valueForProgress(self.bud)
         if growth > 0.01:
             blob = self._blob_rect(bar, QRectF(self.flyout.geometry()), growth)
@@ -707,6 +728,7 @@ class Panel(QWidget):
         delta = global_pos - self._press_global
         if not self.dragging and delta.manhattanLength() > DRAG_THRESHOLD:
             self.dragging = True
+            self._drop_swell()
         if not self.dragging:
             return
         if self.detached:
@@ -751,6 +773,14 @@ class Panel(QWidget):
         self.layout().setContentsMargins(*margins)
         self.layout().activate()
 
+    def _apply_margins(self) -> None:
+        """Con lugar para el bulto, la barra queda pegada al borde y el aire extra va hacia adentro."""
+        if self._pull:
+            return
+        room = SWELL if self._swell_room and self.flyout.isHidden() else 0
+        margins = {"right": (room, 0, 0, 0), "left": (0, 0, room, 0), "top": (0, 0, 0, room)}[self.config.edge]
+        self.layout().setContentsMargins(*margins)
+
     def _detach(self, global_pos: QPoint) -> None:
         """La gota se corta del borde y sigue al mouse como una cápsula suelta."""
         self.detached = True
@@ -770,6 +800,8 @@ class Panel(QWidget):
         self._press_global = None
         self.dragging = False
         if not was_dragging:
+            if self._swell_target is not None:  # clic sobre el bulto: abre la app agrandada
+                self._swell_target.click()
             return
         if self.detached:
             self.detached = False
@@ -823,6 +855,8 @@ class Panel(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
+        if self._press_global is None:
+            self._hover_at(event.position().toPoint())
         self.drag_to(event.globalPosition().toPoint())
         super().mouseMoveEvent(event)
 
@@ -838,6 +872,7 @@ class Panel(QWidget):
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
+        self._set_swell_target(None)
         if self.revealed and not self.config.pinned:
             self.hide_timer.start()
         super().leaveEvent(event)
@@ -845,6 +880,119 @@ class Panel(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         paint_liquid(painter, self._path)
+        self._paint_swollen_icon(painter)
+
+    # --- bulto: la barra se hincha bajo el ícono con el mouse -------------------------------
+
+    def _inward(self) -> QPointF:
+        return {"right": QPointF(-1, 0), "left": QPointF(1, 0), "top": QPointF(0, 1)}[self.config.edge]
+
+    def _swell_buttons(self) -> list[AppIconButton]:
+        return [*self.tool_buttons.values(), self.settings_button]
+
+    def _icon_hover(self, button: AppIconButton, entered: bool) -> None:
+        if entered:
+            if self._press_global is None:
+                self._set_swell_target(button)
+        else:
+            # Puede que el mouse siga sobre el bulto (fuera del botón): lo decide la posición real.
+            QTimer.singleShot(0, lambda: self._hover_at(self.mapFromGlobal(QCursor.pos())))
+
+    def _hover_at(self, pos: QPoint) -> None:
+        """Elige el ícono cuyo tramo de barra (más el bulto hacia adentro) está bajo el mouse."""
+        if self.dragging or not self._path.contains(QPointF(pos)):
+            self._set_swell_target(None)
+            return
+        vertical = is_vertical(self.config.edge)
+        along = pos.y() if vertical else pos.x()
+        half = (ICON + ICON_GAP) / 2
+        for button in self._swell_buttons():
+            center = button.mapTo(self, button.rect().center())
+            if abs(along - (center.y() if vertical else center.x())) <= half:
+                self._set_swell_target(button)
+                return
+        self._set_swell_target(None)
+
+    def _set_swell_target(self, button: AppIconButton | None) -> None:
+        if button is self._swell_target:
+            return
+        self._swell_target = button
+        if button is None:
+            self._animate_swell(0.0)
+            return
+        if not self._swell_room and self.flyout.isHidden():
+            self._swell_room = True
+            self.animation.stop()
+            self._set_rect(self._target(self.revealed))
+        center = button.mapTo(self.bar, button.rect().center())
+        along = float(center.y() if is_vertical(self.config.edge) else center.x())
+        if self._swell_shown is not None:
+            self._swell_shown.set_magnified(False)
+        self._swell_shown = button
+        button.set_magnified(not button.icon().isNull())
+        if self.swell <= 0.01 or self.animation_ms <= 0 or not self.isVisible():
+            self._swell_at = along
+        else:
+            self.slide_anim.stop()
+            self.slide_anim.setDuration(SWELL_MS)
+            self.slide_anim.setStartValue(self._swell_at)
+            self.slide_anim.setEndValue(along)
+            self.slide_anim.start()
+        self._animate_swell(1.0)
+
+    def _animate_swell(self, target: float) -> None:
+        self.swell_anim.stop()
+        if self.animation_ms <= 0 or not self.isVisible():
+            self._set_swell(target)
+            self._swell_finished()
+            return
+        self.swell_anim.setDuration(SWELL_MS)
+        self.swell_anim.setStartValue(self.swell)
+        self.swell_anim.setEndValue(target)
+        self.swell_anim.start()
+
+    def _set_swell(self, value: float) -> None:
+        self.swell = max(0.0, min(1.0, value))
+        self._refresh_shape()
+
+    def _on_slide(self, value) -> None:
+        self._swell_at = float(value)
+        self._refresh_shape()
+
+    def _swell_finished(self) -> None:
+        if self.swell > 0.0 or self._swell_target is not None:
+            return
+        if self._swell_shown is not None:
+            self._swell_shown.set_magnified(False)
+            self._swell_shown = None
+        if self._swell_room:
+            self._swell_room = False
+            if not self.dragging and not self.detached:
+                self.animation.stop()
+                self._set_rect(self._target(self.revealed))
+        self._refresh_shape()
+
+    def _drop_swell(self) -> None:
+        """Al arrastrar, el bulto desaparece al instante (la barra vuelve a su grosor)."""
+        self._swell_target = None
+        self.swell_anim.stop()
+        self.slide_anim.stop()
+        self.swell = 0.0
+        if self._swell_shown is not None:
+            self._swell_shown.set_magnified(False)
+            self._swell_shown = None
+        if self._swell_room:
+            self._swell_room = False
+            self._apply_margins()
+
+    def _paint_swollen_icon(self, painter: QPainter) -> None:
+        button = self._swell_shown
+        if button is None or not button.magnified:
+            return
+        size = APP_ICON + (APP_ICON_SWELL - APP_ICON) * self.swell
+        center = QPointF(button.mapTo(self, button.rect().center())) + self._inward() * (SWELL * self.swell / 2)
+        target = QRectF(center.x() - size / 2, center.y() - size / 2, size, size).toAlignedRect()
+        button.icon().paint(painter, target)
 
 
 def primary_area() -> Rect:

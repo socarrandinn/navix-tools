@@ -3,6 +3,7 @@
 La gota se arma en coordenadas de borde derecho (grosor T hacia la izquierda, largo L hacia abajo):
 el extremo libre es redondeado y el lado pegado a la pantalla se "derrama" con dos curvas
 cóncavas. Con ``wobble`` el lado libre ondula como un líquido (el lado de la pantalla queda fijo).
+Con ``bump`` el lado libre se hincha hacia afuera alrededor de ``bump_at`` (ícono bajo el mouse).
 Para el borde izquierdo se espeja y para el superior se rota.
 """
 
@@ -16,6 +17,7 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen,
 SAMPLES = 220
 NECK_MAX = 30  # ancho máximo de la unión entre dos gotas, en px
 WAVES = 1.5  # ondas a lo largo de la gota
+BUMP_SIGMA = 20.0  # ancho (px) del bulto que hincha la barra bajo el ícono
 
 
 def _right_droplet(thickness: float, length: float, radius: float, flare: float) -> QPainterPath:
@@ -35,13 +37,15 @@ def _right_droplet(thickness: float, length: float, radius: float, flare: float)
     return shape.simplified()
 
 
-def _ripple(path: QPainterPath, thickness: float, length: float, wobble: float, phase: float) -> QPainterPath:
+def _ripple(path: QPainterPath, thickness: float, length: float, wobble: float, phase: float,
+            bump: float = 0.0, bump_at: float = 0.0) -> QPainterPath:
     points = []
     for index in range(SAMPLES):
         point = path.pointAtPercent(index / SAMPLES)
         weight = max(0.0, 1.0 - point.x() / thickness)  # 1 en el lado libre, 0 pegado a la pantalla
         wave = math.sin(phase + 2 * math.pi * WAVES * point.y() / max(1.0, length))
-        x = min(thickness, max(0.0, point.x() + wobble * weight * wave))
+        swell = bump * math.exp(-((point.y() - bump_at) / BUMP_SIGMA) ** 2)
+        x = min(thickness, max(-bump, point.x() + (wobble * wave - swell) * weight))
         points.append(QPointF(x, point.y()))
     rippled = QPainterPath()
     rippled.addPolygon(QPolygonF(points))
@@ -50,11 +54,13 @@ def _ripple(path: QPainterPath, thickness: float, length: float, wobble: float, 
 
 
 def droplet_path(width: float, height: float, edge: str, radius: float, flare: float,
-                 wobble: float = 0.0, phase: float = 0.0) -> QPainterPath:
+                 wobble: float = 0.0, phase: float = 0.0, bump: float = 0.0,
+                 bump_at: float = 0.0) -> QPainterPath:
+    """``bump_at`` se mide a lo largo de la barra (y en bordes laterales, x en el superior)."""
     thickness, length = (height, width) if edge == "top" else (width, height)
     path = _right_droplet(thickness, length, radius, flare)
-    if wobble:
-        path = _ripple(path, thickness, length, wobble, phase)
+    if wobble or bump:
+        path = _ripple(path, thickness, length, wobble, phase, bump, bump_at)
     if edge == "top":
         # (x, y) del borde derecho -> (y, T - x) del borde superior
         return QTransform(0, -1, 1, 0, 0, height).map(path)

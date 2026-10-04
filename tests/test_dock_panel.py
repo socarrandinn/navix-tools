@@ -660,17 +660,69 @@ def test_menu_has_icons_and_hover_style(qtbot):
 
 
 
-def test_app_icons_scale_up_on_hover(qtbot):
-    from dock.panel import APP_ICON, APP_ICON_HOVER, AppIconButton
-
+def _svg_panel(qtbot, edge="right"):
     class SvgTool(CountingTool):
         icon = "network"
 
-    panel, _ = make_panel(qtbot, [LoadedTool("red", SvgTool(), None)])
+    panel, state = make_panel(qtbot, [LoadedTool("red", SvgTool(), None)], config=DockConfig(edge=edge))
+    panel.show()
+    qtbot.waitExposed(panel)
+    return panel, state
+
+
+@pytest.mark.parametrize("edge", ["right", "left", "top"])
+def test_hovered_icon_swells_the_bar_past_its_thickness(qtbot, edge):
+    from dock.panel import SWELL
+
+    panel, state = _svg_panel(qtbot, edge)
     button = panel.tool_buttons["red"]
-    assert isinstance(button, AppIconButton)
-    assert button.iconSize().width() == APP_ICON
+    collapsed = rect(panel)
     button.enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
-    qtbot.waitUntil(lambda: button.iconSize().width() == APP_ICON_HOVER, timeout=1000)
-    button.leaveEvent(QEvent(QEvent.Type.Leave))
-    qtbot.waitUntil(lambda: button.iconSize().width() == APP_ICON, timeout=1000)
+    assert panel.swell == 1.0
+    x, y, w, h = rect(panel)
+    # la ventana gana espacio hacia adentro; la barra sigue pegada al borde
+    expected = {"right": (collapsed[0] - SWELL, y, collapsed[2] + SWELL, h),
+                "left": (collapsed[0], y, collapsed[2] + SWELL, h),
+                "top": (x, collapsed[1], w, collapsed[3] + SWELL)}[edge]
+    assert (x, y, w, h) == expected
+    bar = panel.bar_shape_rect()
+    center = button.mapTo(panel, button.rect().center())
+    beyond = {"right": QPointF(bar.left() - SWELL / 2, center.y()),
+              "left": QPointF(bar.right() + SWELL / 2, center.y()),
+              "top": QPointF(center.x(), bar.bottom() + SWELL / 2)}[edge]
+    assert panel.shape().contains(beyond)
+    assert button.magnified
+
+
+def test_swell_retracts_and_window_shrinks_when_mouse_leaves(qtbot):
+    panel, _ = _svg_panel(qtbot)
+    button = panel.tool_buttons["red"]
+    collapsed = rect(panel)
+    button.enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
+    panel.leaveEvent(QEvent(QEvent.Type.Leave))
+    assert panel.swell == 0.0
+    assert rect(panel) == collapsed
+    assert not button.magnified
+
+
+def test_clicking_the_bulge_opens_the_hovered_app(qtbot):
+    from PySide6.QtCore import Qt
+
+    panel, _ = _svg_panel(qtbot)
+    button = panel.tool_buttons["red"]
+    button.enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
+    bar = panel.bar_shape_rect()
+    center = button.mapTo(panel, button.rect().center())
+    spot = QPoint(round(bar.left() - 4), center.y())
+    qtbot.mouseClick(panel, Qt.MouseButton.LeftButton, pos=spot)
+    assert panel.revealed and panel.current == "red"
+
+
+def test_dragging_cancels_the_swell(qtbot):
+    panel, _ = _svg_panel(qtbot)
+    panel.tool_buttons["red"].enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
+    start = bar_center(panel)
+    panel.begin_drag(start)
+    panel.drag_to(start + QPoint(0, 30))
+    assert panel.swell == 0.0
+    panel.end_drag(start + QPoint(0, 30))

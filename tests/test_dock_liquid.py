@@ -112,3 +112,17 @@ def test_vertical_bridge_meniscus(qapp):
     cx = 150
     assert inside(neck, cx - 10, top.bottom() + 0.5)
     assert not inside(neck, cx - 10, (top.bottom() + bottom.top()) / 2)
+
+
+@pytest.mark.parametrize("edge", ["right", "left", "top"])
+def test_bump_swells_the_free_side_past_the_bar_only_near_its_center(qapp, edge):
+    def free_side_point(along, beyond):
+        # punto a `beyond` px por fuera del lado libre (hacia adentro de la pantalla)
+        return {"right": (-beyond, along), "left": (44 + beyond, along), "top": (along, 44 + beyond)}[edge]
+
+    size = (300, 44) if edge == "top" else (44, 300)
+    calm = droplet_path(*size, edge, radius=22, flare=F)
+    swollen = droplet_path(*size, edge, radius=22, flare=F, bump=12, bump_at=150)
+    assert not inside(calm, *free_side_point(150, 8))
+    assert inside(swollen, *free_side_point(150, 8))
+    assert not inside(swollen, *free_side_point(60, 8))
