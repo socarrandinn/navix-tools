@@ -40,6 +40,7 @@ from .geometry import (
     BAR,
     FLARE,
     GAP,
+    GRIP,
     END_PAD,
     ICON,
     ICON_GAP,
@@ -111,21 +112,22 @@ QMenu::separator { height: 1px; background: rgba(255, 255, 255, 24); margin: 6px
 """)
 
 class Grip(QWidget):
-    """Agarre para arrastrar: botón redondo con doble fila de puntos, primero en la columna de íconos.
+    """Agarre para arrastrar: doble fila de puntos, primero en la columna de íconos.
 
+    Mide justo lo que sus puntos (sin relleno ni fondo al pasar el mouse).
     No consume los clics: el evento sube hasta Panel, que maneja el arrastre.
     """
 
     def __init__(self):
         super().__init__()
-        self.vertical = True
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.setToolTip("Arrastrá para mover · clic derecho para el menú")
-        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
-        self.setFixedSize(ICON, ICON)
+        self.set_vertical(True)
 
     def set_vertical(self, vertical: bool) -> None:
         self.vertical = vertical
+        across = math.ceil(DOT_STEP + 2 * DOT_RADIUS)
+        self.setFixedSize(across, GRIP) if vertical else self.setFixedSize(GRIP, across)
         self.update()
 
     def dots(self) -> int:
@@ -135,11 +137,7 @@ class Grip(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        hovered = self.underMouse()
-        if hovered:
-            painter.setBrush(QColor(255, 255, 255, 46))
-            painter.drawEllipse(QRectF(0, 0, self.width(), self.height()))
-        painter.setBrush(QColor(255, 255, 255, 230) if hovered else QColor(255, 255, 255, 150))
+        painter.setBrush(QColor(255, 255, 255, 170))
         # Doble fila de puntos: ⋮⋮ en barras verticales, dos filas ··· en la barra superior.
         columns, rows = (2, 3) if self.vertical else (3, 2)
         left = (self.width() - (columns - 1) * DOT_STEP) / 2

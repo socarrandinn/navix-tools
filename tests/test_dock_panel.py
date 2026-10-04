@@ -292,14 +292,17 @@ def test_grip_is_a_drawn_handle_with_move_cursor(qtbot):
 
 
 @pytest.mark.parametrize("edge", ["right", "left", "top"])
-def test_grip_is_a_round_icon_first_in_the_column(qtbot, edge):
-    from dock.geometry import ICON
+def test_grip_hugs_its_dots_first_in_the_column(qtbot, edge):
+    from dock.geometry import GRIP
 
     panel, _ = make_panel(qtbot, config=DockConfig(edge=edge))
     panel.show()
     qtbot.waitExposed(panel)
     qtbot.wait(20)
-    assert (panel.grip.width(), panel.grip.height()) == (ICON, ICON)
+    # sin relleno: el agarre mide lo que miden sus puntos, más largo a lo largo de la barra
+    along, across = (panel.grip.width(), panel.grip.height()) if edge == "top" else (panel.grip.height(), panel.grip.width())
+    assert along == GRIP
+    assert across < GRIP
     layout = panel.icons_box.layout()
     assert layout.itemAt(0).widget() is panel.grip
     grip = panel.grip.geometry()
@@ -308,6 +311,24 @@ def test_grip_is_a_round_icon_first_in_the_column(qtbot, edge):
         assert grip.right() < first.left()
     else:
         assert grip.bottom() < first.top()
+
+
+def test_grip_has_no_hover_background(qtbot):
+    from PySide6.QtGui import QImage
+
+    panel, _ = make_panel(qtbot)
+    panel.show()
+    qtbot.waitExposed(panel)
+
+    def render():
+        image = QImage(panel.grip.size(), QImage.Format.Format_ARGB32)
+        image.fill(0)
+        panel.grip.render(image)
+        return image
+
+    idle = render()
+    panel.grip.underMouse = lambda: True
+    assert render() == idle
 
 
 def test_drag_from_grip_reaches_panel(qtbot):

@@ -5,6 +5,7 @@ Rect = tuple[int, int, int, int]
 BAR = 44          # grosor de la barra de apps
 ICON = 28         # botón de cada app
 ICON_GAP = 4
+GRIP = 13         # agarre: largo de sus 3 filas de puntos, sin relleno
 END_PAD = 16      # aire en cada extremo de la columna de íconos
 SETTINGS_SLOT = 32  # engranaje (menú) al final de la barra, mismo tamaño que un ícono
 FLARE = 8         # curva cóncava donde la gota se "derrama" sobre el borde de la pantalla
@@ -24,7 +25,7 @@ def is_vertical(edge: str) -> bool:
 
 def bar_length(tools: int) -> int:
     # agarre + apps + engranaje, con aire en cada extremo
-    return (1 + max(1, tools)) * (ICON + ICON_GAP) + SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
+    return GRIP + ICON_GAP + max(1, tools) * (ICON + ICON_GAP) + SETTINGS_SLOT + 2 * END_PAD + 2 * FLARE
 
 
 def bar_rect(area: Rect, edge: str, position: float, length: int, thickness: int = BAR,
