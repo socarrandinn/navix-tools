@@ -29,6 +29,7 @@ class DockConfig:
     notify: bool = True
     notify_threshold: int = 85
     show_dock: bool = True  # barra en el borde; la bandeja del sistema está siempre
+    codex_sessions: str = ""  # carpeta de sesiones de Codex CLI; vacío = ~/.codex/sessions
 
 
 def dock_dir() -> Path:
@@ -88,6 +89,10 @@ def load_dock_config(path: Path) -> DockConfig:
     show_dock = raw.get("show_dock", default.show_dock)
     if not isinstance(show_dock, bool):
         raise DockConfigError(f"{path}: show_dock debe ser true o false")
+    codex_sessions = raw.get("codex_sessions", default.codex_sessions)
+    if not isinstance(codex_sessions, str):
+        raise DockConfigError(f"{path}: codex_sessions debe ser una ruta (texto)")
     return DockConfig(edge=edge, width=width, tools=tuple(tools), pinned=pinned,
                       position=float(position), ai_sources=tuple(ai_sources), liquid=liquid,
-                      notify=notify, notify_threshold=threshold, show_dock=show_dock)
+                      notify=notify, notify_threshold=threshold, show_dock=show_dock,
+                      codex_sessions=codex_sessions)

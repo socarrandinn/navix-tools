@@ -21,7 +21,7 @@ from .registry import load_tools
 from .settings import SettingsWindow
 from .single import acquire_single_instance
 from .tray import TrayPanel
-from .tools.ai_usage import read_claude_default, read_codex_default
+from .tools.ai_usage import codex_sessions_dir, read_claude_default, read_codex_default
 from .worker import run_async
 
 INSTANCE_NAME = "navix-single-instance"
@@ -97,6 +97,12 @@ def main(argv: list[str] | None = None) -> int:
         tray.showMessage(APP_NAME, "Así se ven los avisos de planes por agotarse.",
                          QSystemTrayIcon.MessageIcon.Information, 5000)
 
+    def probe_usage(source: str, dock_config: DockConfig):
+        now = _now()
+        if source == "claude":
+            return read_claude_default(now)
+        return read_codex_default(now, codex_sessions_dir(dock_config))
+
     def open_settings() -> None:
         window = state.get("settings")
         if window is None:
@@ -114,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
                                                                   statusline.chain_path()),
                 available_tools=AVAILABLE_TOOLS,
                 test_notification=test_notification,
+                usage_probe=probe_usage,
             )
             state["settings"] = window
         window.show()
@@ -145,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         sources = current().config.ai_sources
         now = _now()
         return [read_claude_default(now) if "claude" in sources else None,
-                read_codex_default(now) if "codex" in sources else None]
+                read_codex_default(now, codex_sessions_dir(current().config)) if "codex" in sources else None]
 
     watcher = UsageWatcher(read=read_usage, config=lambda: current().config,
                            log=AlertLog(dock_dir() / "alerts.json"), show=show_alert, now=_now, run=run_async)

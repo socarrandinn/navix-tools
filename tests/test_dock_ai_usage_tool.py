@@ -106,3 +106,15 @@ def test_each_model_is_its_own_separated_block(qtbot):
     tool = make(qtbot)
     assert tool.layout_spacing_between_models() >= 14
     assert tool.blocks["Claude"] is not tool.blocks["Codex"]
+
+
+
+def test_codex_sessions_dir_uses_config_or_default(tmp_path):
+    from pathlib import Path
+
+    from dock.config import DockConfig
+    from dock.tools.ai_usage import DEFAULT_CODEX_SESSIONS, codex_sessions_dir
+
+    assert DEFAULT_CODEX_SESSIONS == Path.home() / ".codex" / "sessions"
+    assert codex_sessions_dir(DockConfig()) == DEFAULT_CODEX_SESSIONS
+    assert codex_sessions_dir(DockConfig(codex_sessions=str(tmp_path))) == tmp_path

@@ -21,8 +21,9 @@ def run_sync(fn, on_done, on_error):
 
 
 class Harness:
-    def __init__(self, qtbot, ip_load=None, ip_save=None, installed=False):
+    def __init__(self, qtbot, ip_load=None, ip_save=None, installed=False, probe=None):
         self.dock_saved = []
+        self.probes = []
         self.ip_saved = []
         self.installed = installed
         self.install_calls = []
@@ -51,6 +52,7 @@ class Harness:
             run=run_sync,
             available_tools=[("ip_switch", "Cambio de IP"), ("ai_usage", "Uso de IA")],
             test_notification=lambda: self.tested.append(1),
+            usage_probe=probe or (lambda source, config: self.probes.append((source, config)) or None),
         )
         qtbot.addWidget(self.window)
 
@@ -247,3 +249,49 @@ def test_profile_editor_prefills_existing_profile(qtbot):
     assert (editor.name.text(), editor.ip.text(), editor.prefix.value(), editor.gateway.text(),
             editor.dns1.text(), editor.dns2.text()) == ("Casa", "192.168.0.100", 24, "192.168.0.254",
                                                         "192.168.0.254", "8.8.8.8")
+
+
+
+def _snapshot(source, minutes_ago):
+    from datetime import datetime, timedelta, timezone
+
+    from dock.usage import UsageSnapshot
+
+    return UsageSnapshot(source, (), datetime.now(timezone.utc) - timedelta(minutes=minutes_ago), None)
+
+
+def test_ai_connections_show_status_of_each_source(qtbot):
+    snapshots = {"claude": _snapshot("Claude", 5), "codex": None}
+    h = Harness(qtbot, probe=lambda source, config: snapshots[source])
+    page = h.window.ai
+    assert page.connection_pills["claude"].text() == "Conectado"
+    assert "5 min" in page.connection_details["claude"].text()
+    assert page.connection_pills["codex"].text() == "Sin datos"
+
+
+def test_ai_connection_test_button_probes_again(qtbot):
+    snapshots = {"claude": None, "codex": None}
+    h = Harness(qtbot, probe=lambda source, config: snapshots[source])
+    page = h.window.ai
+    snapshots["codex"] = _snapshot("Codex", 0)
+    qtbot.mouseClick(page.test_buttons["codex"], Qt.MouseButton.LeftButton)
+    assert page.connection_pills["codex"].text() == "Conectado"
+
+
+def test_codex_folder_is_saved_and_used_for_probing(qtbot, tmp_path):
+    h = Harness(qtbot)
+    page = h.window.ai
+    page.codex_folder.setText(str(tmp_path))
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.dock_saved[-1].codex_sessions == str(tmp_path)
+    qtbot.mouseClick(page.test_buttons["codex"], Qt.MouseButton.LeftButton)
+    assert h.probes[-1] == ("codex", h.dock_saved[-1])
+
+
+def test_codex_folder_rejects_missing_directory(qtbot, tmp_path):
+    h = Harness(qtbot)
+    page = h.window.ai
+    page.codex_folder.setText(str(tmp_path / "no-existe"))
+    qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
+    assert h.dock_saved == []
+    assert "no existe" in page.message.text()

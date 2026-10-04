@@ -152,3 +152,17 @@ def test_invalid_show_dock(tmp_path):
     path.write_text('{"show_dock": "no"}', encoding="utf-8")
     with pytest.raises(DockConfigError, match="show_dock"):
         load_dock_config(path)
+
+
+def test_codex_sessions_defaults_empty_and_roundtrips(tmp_path):
+    path = tmp_path / "dock.json"
+    assert DockConfig().codex_sessions == ""
+    save_dock_config(path, DockConfig(codex_sessions=r"D:\codex\sessions"))
+    assert load_dock_config(path).codex_sessions == r"D:\codex\sessions"
+
+
+def test_invalid_codex_sessions(tmp_path):
+    path = tmp_path / "dock.json"
+    path.write_text('{"codex_sessions": 3}', encoding="utf-8")
+    with pytest.raises(DockConfigError, match="codex_sessions"):
+        load_dock_config(path)

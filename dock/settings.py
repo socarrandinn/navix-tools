@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Sequence
 
 from PySide6.QtCore import QRectF, QSize, Qt
@@ -12,6 +14,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -33,6 +36,7 @@ from .brand import APP_NAME
 from .config import DockConfig
 from .icons import ICON_DIR, svg_icon
 from .theme import themed
+from .usage import UsageSnapshot, age_text
 from .worker import RunAsync, run_async
 
 EDGE_LABELS = (("Derecha", "right"), ("Izquierda", "left"), ("Arriba", "top"))
@@ -269,12 +273,18 @@ class GeneralPage(_Page):
         self.message.setText("Guardado.")
 
 
+UsageProbe = Callable[[str, DockConfig], "UsageSnapshot | None"]
+DEFAULT_CODEX_FOLDER = Path.home() / ".codex" / "sessions"
+
+
 class AiPage(_Page):
     def __init__(self, window: "SettingsWindow", installed: Callable[[], bool],
-                 install: Callable[[], object], uninstall: Callable[[], object]):
-        super().__init__("bot", "Planes de IA", "Qué planes mostrar en Uso de IA (barras 0-100 %).")
+                 install: Callable[[], object], uninstall: Callable[[], object],
+                 probe: UsageProbe, run: RunAsync):
+        super().__init__("bot", "Planes de IA", "Qué planes mostrar en Uso de IA y de dónde se leen.")
         self.window = window
         self._installed, self._install, self._uninstall = installed, install, uninstall
+        self._probe, self._run = probe, run
         sources = window.config.ai_sources
         frame, group = _group()
         self.claude = _switch("claude" in sources, "Claude")
@@ -296,12 +306,71 @@ class AiPage(_Page):
         _row(recorder_group, "settings", "Registrador de Claude",
              "Guarda tu uso en cada actualización de la status line; tu status line actual se mantiene.", status)
         self.page_layout.addWidget(recorder)
+
+        # Conexiones: si cada fuente local tiene datos y de cuándo son.
+        connections, connections_group = _group()
+        self.connection_pills: dict[str, QLabel] = {}
+        self.connection_details: dict[str, QLabel] = {}
+        self.test_buttons: dict[str, QPushButton] = {}
+        for source, icon, title in (("claude", "bot", "Conexión con Claude"), ("codex", "gauge", "Conexión con Codex")):
+            cell = QWidget()
+            cell_row = QHBoxLayout(cell)
+            cell_row.setContentsMargins(0, 0, 0, 0)
+            cell_row.setSpacing(8)
+            pill, detail, test = QLabel("…"), QLabel(""), _button("Probar")
+            pill.setObjectName("pillOff")
+            detail.setObjectName("rowHint")
+            test.clicked.connect(lambda _checked=False, s=source: self.test_connection(s))
+            cell_row.addWidget(detail)
+            cell_row.addWidget(pill)
+            cell_row.addWidget(test)
+            self.connection_pills[source], self.connection_details[source] = pill, detail
+            self.test_buttons[source] = test
+            _row(connections_group, icon, title, "Lee los datos locales; no usa claves ni APIs.", cell)
+        folder = QWidget()
+        folder_row = QHBoxLayout(folder)
+        folder_row.setContentsMargins(0, 0, 0, 0)
+        folder_row.setSpacing(8)
+        self.codex_folder = QLineEdit(window.config.codex_sessions)
+        self.codex_folder.setPlaceholderText(str(DEFAULT_CODEX_FOLDER))
+        self.codex_folder.setMinimumWidth(240)
+        browse = _button("Elegir…")
+        browse.clicked.connect(self.choose_codex_folder)
+        folder_row.addWidget(self.codex_folder, 1)
+        folder_row.addWidget(browse)
+        _row(connections_group, "gauge", "Sesiones de Codex", "Vacío = carpeta por defecto de Codex CLI.", folder)
+        self.page_layout.addWidget(connections)
+
         self.page_layout.addStretch(1)
         self.message = _message()
         self.save_button = _button("Guardar", primary=True)
         self.save_button.clicked.connect(self.save)
         _footer(self.page_layout, self.message, self.save_button)
         self._show_statusline()
+        for source in self.connection_pills:
+            self.test_connection(source)
+
+    def test_connection(self, source: str) -> None:
+        config = self.window.config
+        self.connection_pills[source].setText("Probando…")
+        self._run(lambda: self._probe(source, config),
+                  lambda snapshot, s=source: self._show_connection(s, snapshot),
+                  lambda exc, s=source: self._show_connection(s, None, str(exc)))
+
+    def _show_connection(self, source: str, snapshot: UsageSnapshot | None, error: str = "") -> None:
+        pill, detail = self.connection_pills[source], self.connection_details[source]
+        ok = snapshot is not None
+        pill.setText("Conectado" if ok else "Sin datos")
+        pill.setObjectName("pillOn" if ok else "pillOff")
+        pill.style().unpolish(pill)
+        pill.style().polish(pill)
+        detail.setText(error or (age_text(snapshot.captured_at, datetime.now(timezone.utc)) if ok else ""))
+
+    def choose_codex_folder(self) -> None:
+        start = self.codex_folder.text().strip() or str(DEFAULT_CODEX_FOLDER)
+        folder = QFileDialog.getExistingDirectory(self, "Carpeta de sesiones de Codex", start)
+        if folder:
+            self.codex_folder.setText(folder)
 
     def _show_statusline(self) -> None:
         active = self._installed()
@@ -320,8 +389,13 @@ class AiPage(_Page):
 
     def save(self) -> None:
         sources = tuple(name for name, box in (("claude", self.claude), ("codex", self.codex)) if box.isChecked())
-        self.window.save_dock(ai_sources=sources)
+        folder = self.codex_folder.text().strip()
+        if folder and not Path(folder).expanduser().is_dir():
+            self.message.setText(f"La carpeta {folder} no existe.")
+            return
+        self.window.save_dock(ai_sources=sources, codex_sessions=folder)
         self.message.setText("Guardado.")
+        self.test_connection("codex")
 
 
 class ProfileEditor(QDialog):
@@ -654,6 +728,7 @@ class SettingsWindow(QWidget):
         run: RunAsync = run_async,
         available_tools: Sequence[tuple[str, str]] = (("ip_switch", "Cambio de IP"), ("ai_usage", "Uso de IA")),
         test_notification: Callable[[], None] = lambda: None,
+        usage_probe: UsageProbe = lambda source, config: None,
     ):
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle(f"{APP_NAME} · Configuración")
@@ -684,7 +759,7 @@ class SettingsWindow(QWidget):
 
         self.stack = QStackedWidget()
         self.general = GeneralPage(self, available_tools)
-        self.ai = AiPage(self, statusline_installed, statusline_install, statusline_uninstall)
+        self.ai = AiPage(self, statusline_installed, statusline_install, statusline_uninstall, usage_probe, run)
         self.network = NetworkPage(self, ip_load, ip_adapters, ip_save, run)
         self.notifications = NotificationsPage(self, test_notification)
         self.appearance = AppearancePage(self)

@@ -7,7 +7,7 @@ from typing import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QLabel, QProgressBar, QVBoxLayout, QWidget
 
-from ..config import AI_SOURCES, DockConfigError, dock_dir, load_dock_config
+from ..config import AI_SOURCES, DockConfig, DockConfigError, dock_dir, load_dock_config
 from ..statusline import usage_path
 from ..tool import Tool
 from ..usage import UsageSnapshot, age_text, read_claude, read_codex, reset_text
@@ -155,8 +155,21 @@ def read_claude_default(now: datetime) -> UsageSnapshot | None:
     return read_claude(usage_path(), now)
 
 
-def read_codex_default(now: datetime) -> UsageSnapshot | None:
-    return read_codex(Path.home() / ".codex" / "sessions", now)
+DEFAULT_CODEX_SESSIONS = Path.home() / ".codex" / "sessions"
+
+
+def codex_sessions_dir(config: DockConfig | None = None) -> Path:
+    """Carpeta de sesiones de Codex: la de Configuración o ~/.codex/sessions."""
+    if config is None:
+        try:
+            config = load_dock_config(dock_dir() / "dock.json")
+        except DockConfigError:
+            config = DockConfig()
+    return Path(config.codex_sessions).expanduser() if config.codex_sessions else DEFAULT_CODEX_SESSIONS
+
+
+def read_codex_default(now: datetime, folder: Path | None = None) -> UsageSnapshot | None:
+    return read_codex(folder or codex_sessions_dir(), now)
 
 
 def create_tool() -> Tool:

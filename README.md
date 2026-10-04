@@ -27,7 +27,7 @@ Y la barra en sí:
 - **Bulto al pasar el mouse:** la barra se hincha bajo el ícono, más allá de su grosor, y el ícono crece adentro del bulto.
 - **Arrastrar y pegar:** tirás de la barra desde el agarre y se estira como líquido; pasados unos 70 px se despega, y al soltarla se pega al borde más cercano.
 - **Fijar** el panel abierto, o dejar que se cierre solo al sacar el mouse.
-- Ícono en la **bandeja del sistema** con acceso a la configuración.
+- **Modo bandeja:** clic en el ícono de Navix (junto al WiFi y el idioma) abre las apps en un panel flotante. La barra del borde se puede ocultar desde Configuración → Apariencia.
 
 ## Instalar
 
@@ -65,16 +65,17 @@ Engranaje de la barra → **Configuración** (también desde la bandeja del sist
 | Sección | Opciones |
 | --- | --- |
 | General | Qué apps aparecen en la barra. |
-| Planes de IA | Qué planes mostrar (Claude, Codex) y activar o desactivar el registrador de Claude. |
+| Planes de IA | Qué planes mostrar, registrador de Claude, estado de cada conexión (con botón **Probar**) y carpeta de sesiones de Codex. |
 | Red (IP) | Adaptador y perfiles de IP fija. Guardar pide UAC una vez y escribe en `C:\ProgramData\ipswitch\config.json`. |
 | Notificaciones | Umbral de aviso (85 % por defecto), una vez por ciclo de reinicio, y botón "Probar notificación". |
-| Apariencia | Borde (derecha, izquierda, arriba), ancho de las apps y efecto líquido. |
+| Apariencia | Borde (derecha, izquierda, arriba), ancho de las apps, efecto líquido y mostrar u ocultar la barra del borde. |
 
 La configuración de la barra se guarda en `%APPDATA%\navix\dock.json`:
 
 ```json
 {"edge": "right", "width": 320, "tools": ["ip_switch", "ai_usage"], "pinned": false,
- "position": 0.5, "ai_sources": ["claude", "codex"], "liquid": true}
+ "position": 0.5, "ai_sources": ["claude", "codex"], "liquid": true, "show_dock": true,
+ "codex_sessions": ""}
 ```
 
 ## Cambio de IP
@@ -116,7 +117,7 @@ Desde Configuración → Red (IP), o editando `C:\ProgramData\ipswitch\config.js
 
 Los datos se leen de fuentes locales; no se usa ninguna API ni credencial.
 
-- **Codex:** se lee de `~/.codex/sessions` (el último dato que guardó Codex CLI).
+- **Codex:** se lee de `~/.codex/sessions` (el último dato que guardó Codex CLI). Otra carpeta: Configuración → Planes de IA → Sesiones de Codex.
 - **Claude:** se lee de la [status line](https://code.claude.com/docs/en/statusline) de Claude Code. Se activa una vez con:
 
   ```powershell
