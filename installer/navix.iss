@@ -27,6 +27,8 @@ UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 WizardStyle=modern
 CloseApplications=yes
+; Log en %TEMP%\Setup Log *.txt para diagnosticar instalaciones fallidas.
+SetupLogging=yes
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -57,11 +59,14 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden;
 Filename: "{app}\cli\ipswitch.exe"; Parameters: "uninstall"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveHelperTask"
 
 [Code]
-// IPDock (versión anterior) puede estar abierto desde su carpeta vieja: cerrarlo antes de borrarla.
+// Navix Tools vive en la bandeja (sin ventana) y el Restart Manager no siempre puede cerrarlo:
+// con el exe abierto la copia falla. Se cierran la versión actual y la anterior (IPDock).
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
+  Exec(ExpandConstant('{cmd}'), '/C taskkill /IM {#AppExe} /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{cmd}'), '/C taskkill /IM IPDock.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(500);  // que Windows libere los archivos antes de copiar
   Result := '';
 end;
