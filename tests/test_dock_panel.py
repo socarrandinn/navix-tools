@@ -672,7 +672,7 @@ def _svg_panel(qtbot, edge="right"):
 
 @pytest.mark.parametrize("edge", ["right", "left", "top"])
 def test_hovered_icon_swells_the_bar_past_its_thickness(qtbot, edge):
-    from dock.panel import SWELL
+    from dock.panel import APP_ICON, SWELL
 
     panel, state = _svg_panel(qtbot, edge)
     button = panel.tool_buttons["red"]
@@ -691,7 +691,8 @@ def test_hovered_icon_swells_the_bar_past_its_thickness(qtbot, edge):
               "left": QPointF(bar.right() + SWELL / 2, center.y()),
               "top": QPointF(center.x(), bar.bottom() + SWELL / 2)}[edge]
     assert panel.shape().contains(beyond)
-    assert button.magnified
+    # sin efecto de escala: el ícono queda de su tamaño
+    assert button.iconSize().width() == APP_ICON
 
 
 def test_swell_retracts_and_window_shrinks_when_mouse_leaves(qtbot):
@@ -702,7 +703,6 @@ def test_swell_retracts_and_window_shrinks_when_mouse_leaves(qtbot):
     panel.leaveEvent(QEvent(QEvent.Type.Leave))
     assert panel.swell == 0.0
     assert rect(panel) == collapsed
-    assert not button.magnified
 
 
 def test_clicking_the_bulge_opens_the_hovered_app(qtbot):
