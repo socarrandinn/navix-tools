@@ -28,8 +28,8 @@ class OptionCard(QPushButton):
         super().__init__()
         self.setObjectName("optionCard")
         self.setAccessibleName(title)
-        self.setToolTip(f"Cambiar a {title}")
         self.setMinimumHeight(52)
+        self.set_active(False)
         row = QHBoxLayout(self)
         row.setContentsMargins(10, 8, 10, 8)
         row.setSpacing(10)
@@ -49,6 +49,19 @@ class OptionCard(QPushButton):
         row.addLayout(texts, 1)
         for label in (self.icon_label, self.title, self.detail):
             label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def set_active(self, active: bool) -> None:
+        """La opción ya aplicada se resalta pero no se puede volver a elegir."""
+        self.active = active
+        self.setProperty("active", active)
+        name = self.accessibleName()
+        self.setToolTip(f"{name}: perfil activo" if active else f"Cambiar a {name}")
+        self.setCursor(Qt.CursorShape.ArrowCursor if active else Qt.CursorShape.PointingHandCursor)
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def hitButton(self, pos) -> bool:
+        return not self.active and super().hitButton(pos)
 
 
 class IpSwitchTool(Tool):
@@ -71,7 +84,7 @@ class IpSwitchTool(Tool):
         self.settle_ms = settle_ms
         self.busy = False
         self.loading = False
-        self.buttons: list[QPushButton] = []
+        self.buttons: list[OptionCard] = []
         self._button_keys: list[tuple[str, str | None]] = []
         self._button_names: tuple[str, ...] | None = None
 
@@ -147,9 +160,7 @@ class IpSwitchTool(Tool):
 
     def _mark_active(self, active: tuple[str, str | None] | None) -> None:
         for button, key in zip(self.buttons, self._button_keys):
-            button.setProperty("active", key == active)
-            button.style().unpolish(button)
-            button.style().polish(button)
+            button.set_active(key == active)
 
     def switch(self, action: str, profile: str | None = None) -> None:
         if self.busy:

@@ -93,7 +93,8 @@ QPushButton:disabled { color: #8b949e; }
 QPushButton#optionCard { background: rgba(255, 255, 255, 10); border: 1px solid rgba(255, 255, 255, 26);
                          border-radius: @controlpx; padding: 0px; text-align: left; }
 QPushButton#optionCard:hover { background: rgba(255, 255, 255, 24); }
-QPushButton#optionCard[active="true"] { background: rgba(88, 166, 255, 60); border-color: rgba(150, 200, 255, 200); }
+QPushButton#optionCard[active="true"], QPushButton#optionCard[active="true"]:hover {
+    background: rgba(88, 166, 255, 60); border-color: rgba(150, 200, 255, 200); }
 QPushButton#optionCard QLabel { background: transparent; }
 QLabel#optionTitle { font-weight: 600; font-size: 13px; }
 QLabel#optionDetail { font-size: 11px; color: rgba(240, 244, 248, 160); }

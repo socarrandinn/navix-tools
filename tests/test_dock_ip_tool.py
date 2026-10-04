@@ -77,12 +77,33 @@ def test_click_profile_switches_and_refreshes(qtbot):
         calls.append((action, profile))
         return Result("1", True, "Perfil Casa aplicado")
 
-    tool, reads = make(qtbot, switch=switch)
+    tool, reads = make(qtbot, read=lambda adapter: reads.append(adapter) or DHCP, switch=switch)
     tool.refresh()
     qtbot.mouseClick(tool.buttons[1], Qt.MouseButton.LeftButton)
     assert calls == [("profile", "Casa")]
     assert tool.message.text() == "Perfil Casa aplicado"
     assert len(reads) == 2
+
+
+def test_active_option_cannot_be_clicked(qtbot):
+    calls = []
+
+    def switch(action, profile=None):
+        calls.append((action, profile))
+        return Result("1", True, "ok")
+
+    tool, reads = make(qtbot, switch=switch)
+    tool.refresh()
+    casa = tool.buttons[1]
+    qtbot.mouseClick(casa, Qt.MouseButton.LeftButton)
+    assert calls == []
+    assert len(reads) == 1
+    assert casa.cursor().shape() == Qt.CursorShape.ArrowCursor
+    assert casa.toolTip() == "Casa: perfil activo"
+    # las demás opciones siguen disponibles
+    assert tool.buttons[0].cursor().shape() == Qt.CursorShape.PointingHandCursor
+    qtbot.mouseClick(tool.buttons[0], Qt.MouseButton.LeftButton)
+    assert calls == [("dhcp", None)]
 
 
 def test_buttons_disabled_while_switching_and_refresh_ignored(qtbot):
