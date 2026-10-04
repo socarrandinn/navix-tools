@@ -6,6 +6,8 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .brand import data_folder
+
 TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 EDGES = {"left", "right", "top"}
 AI_SOURCES = ("claude", "codex")
@@ -29,8 +31,7 @@ class DockConfig:
 
 
 def dock_dir() -> Path:
-    base = os.environ.get("APPDATA") or str(Path.home())
-    return Path(base) / "ipdock"
+    return data_folder(Path(os.environ.get("APPDATA") or Path.home()))
 
 
 def save_dock_config(path: Path, config: DockConfig) -> None:

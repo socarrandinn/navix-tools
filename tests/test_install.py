@@ -99,7 +99,7 @@ def test_prepare_script_contents():
 
 
 def test_prepare_script_lets_files_inherit_the_acl():
-    # (OI)(CI) con /T deja a los archivos con la DACL vacía: ni los usuarios pueden ejecutar IPDock.exe.
+    # (OI)(CI) con /T deja a los archivos con la DACL vacía: ni los usuarios pueden ejecutar NavixTools.exe.
     script = prepare_script(r"C:\ProgramData\ipswitch", r"C:\Program Files\ipswitch")
     grants = [line for line in script.splitlines() if "/inheritance:r" in line]
     assert grants and all("/T" not in line for line in grants)

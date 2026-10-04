@@ -1,11 +1,11 @@
-"""Rutas de la app instalada (PyInstaller): C:\Program Files\IPDock\IPDock.exe y cli\ipswitch.exe."""
+r"""Rutas de la app instalada (PyInstaller): C:\Program Files\Navix Tools\NavixTools.exe y cli\ipswitch.exe."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-DOCK_EXE = "IPDock.exe"
+DOCK_EXE = "NavixTools.exe"
 CLI_EXE = "ipswitch.exe"
 
 

@@ -2,7 +2,7 @@ import json
 import subprocess
 from datetime import datetime, timezone
 
-from dock.statusline import install, recorder_command, run, uninstall
+from dock.statusline import install, recorder_command, refresh_command, run, uninstall
 from dock.usage import read_claude
 
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
@@ -60,7 +60,7 @@ def test_install_chains_previous_status_line_and_keeps_other_settings(tmp_path):
     assert data["statusLine"] == {"type": "command", "command": "RECORDER"}
     assert data["theme"] == "dark"
     assert json.loads(chain.read_text(encoding="utf-8")) == CAVEMAN
-    assert json.loads(settings.with_name("settings.json.ipdock.bak").read_text(encoding="utf-8"))["statusLine"] == CAVEMAN
+    assert json.loads(settings.with_name("settings.json.navix.bak").read_text(encoding="utf-8"))["statusLine"] == CAVEMAN
 
 
 def test_install_twice_does_not_chain_itself(tmp_path):
@@ -102,3 +102,26 @@ def test_is_installed(tmp_path):
     assert is_installed(settings, "RECORDER") is False
     install(settings, chain, "RECORDER")
     assert is_installed(settings, "RECORDER") is True
+
+
+OLD_FROZEN = r'"C:\Program Files\IPDock\cli\ipswitch.exe" statusline'
+NEW_FROZEN = r'"C:\Program Files\Navix Tools\cli\ipswitch.exe" statusline'
+
+
+def test_refresh_points_an_old_install_path_to_the_current_recorder(tmp_path):
+    settings = tmp_path / "settings.json"
+    write_json(settings, {"theme": "dark", "statusLine": {"type": "command", "command": OLD_FROZEN}})
+    assert refresh_command(settings, NEW_FROZEN) is True
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    assert data["statusLine"] == {"type": "command", "command": NEW_FROZEN}
+    assert data["theme"] == "dark"
+
+
+def test_refresh_leaves_foreign_or_current_status_lines_alone(tmp_path):
+    settings = tmp_path / "settings.json"
+    write_json(settings, {"statusLine": CAVEMAN})
+    assert refresh_command(settings, NEW_FROZEN) is False
+    assert json.loads(settings.read_text(encoding="utf-8"))["statusLine"] == CAVEMAN
+    write_json(settings, {"statusLine": {"type": "command", "command": NEW_FROZEN}})
+    assert refresh_command(settings, NEW_FROZEN) is False
+    assert refresh_command(tmp_path / "missing.json", NEW_FROZEN) is False

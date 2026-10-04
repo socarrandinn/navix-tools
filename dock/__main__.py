@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from datetime import datetime, timezone
 
 from PySide6.QtCore import QTimer
@@ -12,8 +13,8 @@ from ipswitch.elevate import save_config_elevated
 from ipswitch.status import list_adapters
 
 from . import statusline
+from .brand import APP_NAME
 from .config import DockConfig, DockConfigError, dock_dir, load_dock_config, save_dock_config
-from .icons import svg_icon
 from .notify import Alert, AlertLog, UsageWatcher
 from .panel import Panel, primary_area
 from .registry import load_tools
@@ -22,7 +23,8 @@ from .single import acquire_single_instance
 from .tools.ai_usage import read_claude_default, read_codex_default
 from .worker import run_async
 
-INSTANCE_NAME = "ipdock-single-instance"
+INSTANCE_NAME = "navix-single-instance"
+APP_ICON = Path(__file__).resolve().parent / "assets" / "navix.ico"
 AVAILABLE_TOOLS = (("ip_switch", "Cambio de IP"), ("ai_usage", "Uso de IA"))
 USAGE_CHECK_MS = 5 * 60 * 1000
 
@@ -40,6 +42,8 @@ def _now() -> datetime:
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv[:1])
     configure_app(app)
+    app.setApplicationDisplayName(APP_NAME)
+    app.setWindowIcon(QIcon(str(APP_ICON)))
     server = acquire_single_instance(INSTANCE_NAME)
     if server is None:
         return 0
@@ -47,10 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = load_dock_config(config_path)
     except DockConfigError as exc:
-        QMessageBox.critical(None, "IPDock", str(exc))
+        QMessageBox.critical(None, APP_NAME, str(exc))
         return 1
 
     state: dict[str, object] = {}
+    # Una instalación anterior (IPDock) dejó la status line apuntando a su carpeta.
+    statusline.refresh_command(statusline.settings_path(), statusline.default_recorder_command())
 
     def current() -> Panel:
         return state["panel"]  # type: ignore[return-value]
@@ -74,14 +80,14 @@ def main(argv: list[str] | None = None) -> int:
         else:
             old.apply_config(changed)
 
-    tray = QSystemTrayIcon(svg_icon("gauge", color="#ffffff", size=32) or QIcon())
-    tray.setToolTip("IPDock")
+    tray = QSystemTrayIcon(QIcon(str(APP_ICON)))
+    tray.setToolTip(APP_NAME)
 
     def show_alert(alert: Alert) -> None:
         tray.showMessage(alert.title, alert.message, QSystemTrayIcon.MessageIcon.Warning, 8000)
 
     def test_notification() -> None:
-        tray.showMessage("IPDock", "Así se ven los avisos de planes por agotarse.",
+        tray.showMessage(APP_NAME, "Así se ven los avisos de planes por agotarse.",
                          QSystemTrayIcon.MessageIcon.Information, 5000)
 
     def open_settings() -> None:

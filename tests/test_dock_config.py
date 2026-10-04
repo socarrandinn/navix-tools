@@ -55,7 +55,26 @@ def test_corrupt_not_overwritten(tmp_path):
 
 def test_dock_dir_uses_appdata(monkeypatch, tmp_path):
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert dock_dir() == tmp_path / "ipdock"
+    assert dock_dir() == tmp_path / "navix"
+
+
+def test_dock_dir_moves_the_old_ipdock_folder(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    old = tmp_path / "ipdock"
+    old.mkdir()
+    (old / "dock.json").write_text('{"edge": "top"}', encoding="utf-8")
+    assert dock_dir() == tmp_path / "navix"
+    assert (tmp_path / "navix" / "dock.json").read_text(encoding="utf-8") == '{"edge": "top"}'
+    assert not old.exists()
+
+
+def test_dock_dir_keeps_new_folder_when_both_exist(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    (tmp_path / "ipdock").mkdir()
+    (tmp_path / "navix").mkdir()
+    (tmp_path / "navix" / "dock.json").write_text("{}", encoding="utf-8")
+    assert dock_dir() == tmp_path / "navix"
+    assert (tmp_path / "ipdock").exists()
 
 
 def test_defaults_bubble_middle_unpinned():

@@ -72,7 +72,7 @@ def helper_action(target: Path) -> tuple[str, str, str]:
 
 
 def helper_action_frozen(executable: str | Path) -> tuple[str, str, str]:
-    """App instalada: la tarea corre IPDock.exe de Program Files (solo-admin), sin copiar Python."""
+    """App instalada: la tarea corre NavixTools.exe de Program Files (solo-admin), sin copiar Python."""
     return str(dock_exe(executable)), "helper", str(app_dir(executable))
 
 

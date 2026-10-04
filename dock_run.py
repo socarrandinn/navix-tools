@@ -1,4 +1,4 @@
-"""Entrada de IPDock.exe (sin consola): la barra, más el helper elevado y el guardado de perfiles."""
+"""Entrada de NavixTools.exe (sin consola): la barra, más el helper elevado y el guardado de perfiles."""
 
 import sys
 

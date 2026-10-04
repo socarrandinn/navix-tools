@@ -1,4 +1,4 @@
-"""Rutas y comandos cuando IPDock corre instalado (PyInstaller), no desde el código fuente."""
+"""Rutas y comandos cuando Navix Tools corre instalado (PyInstaller), no desde el código fuente."""
 
 from pathlib import Path
 
@@ -8,24 +8,24 @@ from ipswitch.frozen import app_dir, dock_exe, cli_exe
 from ipswitch.install import helper_action_frozen
 from ipswitch.models import StaticProfile
 
-APP = Path(r"C:\Program Files\IPDock")
+APP = Path(r"C:\Program Files\Navix Tools")
 CONFIG = AppConfig("Wi-Fi", (StaticProfile("Casa", "192.168.0.100", 24, "192.168.0.254", ()),))
 
 
 def test_app_dir_from_either_executable():
-    assert app_dir(APP / "IPDock.exe") == APP
+    assert app_dir(APP / "NavixTools.exe") == APP
     assert app_dir(APP / "cli" / "ipswitch.exe") == APP
-    assert dock_exe(APP / "cli" / "ipswitch.exe") == APP / "IPDock.exe"
-    assert cli_exe(APP / "IPDock.exe") == APP / "cli" / "ipswitch.exe"
+    assert dock_exe(APP / "cli" / "ipswitch.exe") == APP / "NavixTools.exe"
+    assert cli_exe(APP / "NavixTools.exe") == APP / "cli" / "ipswitch.exe"
 
 
 def test_helper_task_runs_the_installed_windowed_exe():
-    assert helper_action_frozen(APP / "cli" / "ipswitch.exe") == (str(APP / "IPDock.exe"), "helper", str(APP))
+    assert helper_action_frozen(APP / "cli" / "ipswitch.exe") == (str(APP / "NavixTools.exe"), "helper", str(APP))
 
 
 def test_save_config_uses_installed_exe_when_frozen():
-    exe, params, cwd = save_config_command(CONFIG, executable=str(APP / "IPDock.exe"), frozen=True)
-    assert exe == str(APP / "IPDock.exe")
+    exe, params, cwd = save_config_command(CONFIG, executable=str(APP / "NavixTools.exe"), frozen=True)
+    assert exe == str(APP / "NavixTools.exe")
     assert params.startswith("save-config ")
     assert decode_config(params.split()[-1]) == CONFIG
     assert cwd == str(APP)
@@ -34,7 +34,7 @@ def test_save_config_uses_installed_exe_when_frozen():
 def test_statusline_recorder_uses_console_cli_when_frozen():
     from dock.statusline import recorder_command_for
 
-    assert recorder_command_for(True, str(APP / "IPDock.exe")) == f'"{APP / "cli" / "ipswitch.exe"}" statusline'
+    assert recorder_command_for(True, str(APP / "NavixTools.exe")) == f'"{APP / "cli" / "ipswitch.exe"}" statusline'
 
 
 def test_frozen_install_registers_installed_exe_without_copying_python(tmp_path):
@@ -49,12 +49,12 @@ def test_frozen_install_registers_installed_exe_without_copying_python(tmp_path)
         scripts.append(base64.b64decode(args[4]).decode("utf-16-le"))
         return CommandResult(0, "")
 
-    app = tmp_path / "IPDock"
+    app = tmp_path / "Navix Tools"
     (app / "cli").mkdir(parents=True)
     install(config_path=tmp_path / "ProgramData" / "ipswitch" / "config.json", runner=runner,
             frozen=True, executable=str(app / "cli" / "ipswitch.exe"))
     register = scripts[-1]
-    assert f"-Execute '{app / 'IPDock.exe'}'" in register
+    assert f"-Execute '{app / 'NavixTools.exe'}'" in register
     assert "-Argument 'helper'" in register
     assert not (app / "python").exists()
 

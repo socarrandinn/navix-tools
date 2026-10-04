@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from .brand import APP_NAME, APP_SLUG, data_folder
 from .usage import record_claude
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,7 +27,7 @@ ChainRunner = Callable[[str, str], str]
 
 
 def data_dir() -> Path:
-    return Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "ipdock"
+    return data_folder(Path(os.environ.get("LOCALAPPDATA") or Path.home()))
 
 
 def usage_path() -> Path:
@@ -65,6 +66,22 @@ def is_installed(settings: Path, command: str) -> bool:
     return isinstance(current, dict) and current.get("command") == command
 
 
+def refresh_command(settings: Path, command: str) -> bool:
+    """Si la status line es el registrador de una instalación anterior (otra carpeta, p. ej. IPDock),
+    la apunta al registrador actual. Devuelve True si cambió algo."""
+    try:
+        data = _read_settings(settings)
+    except (OSError, ValueError):
+        return False
+    current = data.get("statusLine")
+    old = current.get("command") if isinstance(current, dict) else None
+    if not isinstance(old, str) or old == command or not old.endswith('ipswitch.exe" statusline'):
+        return False
+    data["statusLine"] = {**current, "command": command}
+    _write_settings(settings, data)
+    return True
+
+
 def run_chained(command: str, stdin_text: str) -> str:
     proc = subprocess.run(
         command, shell=True, input=stdin_text.encode("utf-8"), capture_output=True, timeout=5,
@@ -101,9 +118,9 @@ def install(settings: Path, chain: Path, command: str) -> str:
     data = _read_settings(settings)
     current = data.get("statusLine")
     if isinstance(current, dict) and current.get("command") == command:
-        return "La status line de IPDock ya estaba instalada."
+        return f"La status line de {APP_NAME} ya estaba instalada."
     if settings.exists():
-        shutil.copy2(settings, settings.with_name(settings.name + ".ipdock.bak"))
+        shutil.copy2(settings, settings.with_name(f"{settings.name}.{APP_SLUG}.bak"))
     chain.parent.mkdir(parents=True, exist_ok=True)
     chain.write_text(json.dumps(current), encoding="utf-8")
     data["statusLine"] = {"type": "command", "command": command}
@@ -116,7 +133,7 @@ def uninstall(settings: Path, chain: Path) -> str:
     try:
         previous = json.loads(chain.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return "No había status line de IPDock instalada."
+        return f"No había status line de {APP_NAME} instalada."
     if previous is None:
         data.pop("statusLine", None)
     else:

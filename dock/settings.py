@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from ipswitch.config import AppConfig, ConfigError, parse_config
 from ipswitch.models import ProfileError, StaticProfile
 
+from .brand import APP_NAME
 from .config import DockConfig
 from .icons import ICON_DIR, svg_icon
 from .theme import themed
@@ -652,7 +653,7 @@ class SettingsWindow(QWidget):
         test_notification: Callable[[], None] = lambda: None,
     ):
         super().__init__(None, Qt.WindowType.Window)
-        self.setWindowTitle("IPDock · Configuración")
+        self.setWindowTitle(f"{APP_NAME} · Configuración")
         self.setStyleSheet(STYLE)
         self.resize(900, 580)
         self.config = config

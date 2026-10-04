@@ -11,8 +11,8 @@
 
 ---
 
-> **Nota:** el proyecto está pasando de *IPDock* a *Navix Tools*. Hasta terminar el renombrado,
-> el ejecutable, el instalador y las rutas de configuración siguen usando el nombre `IPDock`.
+> **Antes se llamaba IPDock.** Al instalar Navix Tools se cierra y borra la versión anterior, y la
+> configuración de `%APPDATA%\ipdock` se mueve sola a `%APPDATA%\navix`.
 
 ## Qué incluye
 
@@ -31,8 +31,8 @@ Y la barra en sí:
 
 ## Instalar
 
-1. Descargá `IPDock-Setup-1.0.0.exe` desde [Releases](https://github.com/socarrandinn/navix-tools/releases).
-2. Ejecutalo. Pide permisos de administrador **una sola vez**: instala en `C:\Program Files\IPDock`, configura el helper de red y, si querés, lo inicia con Windows.
+1. Descargá `Navix-Tools-Setup-1.1.0.exe` desde [Releases](https://github.com/socarrandinn/navix-tools/releases).
+2. Ejecutalo. Pide permisos de administrador **una sola vez**: instala en `C:\Program Files\Navix Tools`, configura el helper de red y, si querés, lo inicia con Windows.
 
 ### Generar el instalador
 
@@ -70,7 +70,7 @@ Engranaje de la barra → **Configuración** (también desde la bandeja del sist
 | Notificaciones | Umbral de aviso (85 % por defecto), una vez por ciclo de reinicio, y botón "Probar notificación". |
 | Apariencia | Borde (derecha, izquierda, arriba), ancho de las apps y efecto líquido. |
 
-La configuración de la barra se guarda en `%APPDATA%\ipdock\dock.json`:
+La configuración de la barra se guarda en `%APPDATA%\navix\dock.json`:
 
 ```json
 {"edge": "right", "width": 320, "tools": ["ip_switch", "ai_usage"], "pinned": false,

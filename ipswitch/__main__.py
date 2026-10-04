@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("install", help="(admin) crea config, permisos y tarea programada")
     sub.add_parser("uninstall", help="(admin) borra la tarea programada")
     sub.add_parser("helper", help="uso interno de la tarea programada")
-    save = sub.add_parser("save-config", help="(admin) guarda perfiles recibidos de IPDock")
+    save = sub.add_parser("save-config", help="(admin) guarda perfiles recibidos de Navix Tools")
     save.add_argument("data")
     return parser
 
