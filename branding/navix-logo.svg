@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="256" viewBox="0 0 640 256">
+  <title>Navix Tools</title>
+  <desc>Navix folding-tool mark with a bold Navix wordmark and spaced TOOLS subtitle.</desc>
+  <defs>
+    <linearGradient id="handle" x1="40" y1="168" x2="228" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5145CD"/>
+      <stop offset="1" stop-color="#167C94"/>
+    </linearGradient>
+  </defs>
+  <path fill="#14B8A6" d="M44 184V76Q44 44 84 24V184Z"/>
+  <path fill="#5685F4" d="M66 184L119 100L181 44L184 87L111 184Z"/>
+  <path fill="url(#handle)" fill-rule="evenodd" d="M68 164H200A28 28 0 0 1 200 220H68A28 28 0 0 1 68 164ZM78 192A10 10 0 1 0 58 192A10 10 0 1 0 78 192Z"/>
+  <g fill="currentColor" font-family="Segoe UI, sans-serif">
+    <text x="268" y="145" font-size="100" font-weight="700" letter-spacing="-3">Navix</text>
+    <text x="274 300 330 360 384" y="190" font-size="24" font-weight="600" letter-spacing="8">TOOLS</text>
+  </g>
+</svg>
