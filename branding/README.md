@@ -14,9 +14,12 @@ There is no cross, shield, lettering, or fine decorative detail in the mark.
   and small, letter-spaced TOOLS. Uses `Segoe UI, sans-serif` live text.
 - `navix-mark-mono.svg`: one compound path filled with `currentColor`;
   transparent pivot and background, no gradients.
-- `navix-256.png`: transparent 256 × 256 RGBA icon.
-- `navix.ico`: transparent Windows icon containing 16, 24, 32, 48, 64,
-  128, and 256 pixel images.
+- `navix-brand-guide.png`: brand guide with the glossy app icon (light and
+  dark tiles, sizes, monochrome marks and lockups).
+- `navix-1024.png` / `navix-256.png`: glossy app icon on its dark rounded
+  tile, taken from the brand guide; transparent corners.
+- `navix.ico`: the same app icon for Windows (exe, installer, window and
+  tray), with 16, 24, 32, 48, 64, 128 and 256 pixel images.
 - `preview.png`: color mark on light and dark backgrounds, including
   actual-size 16, 24, 32, and 48 pixel samples.
 

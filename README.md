@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/navix-mark.svg" width="96" alt="Navix Tools">
+  <img src="branding/navix-256.png" width="112" alt="Navix Tools">
 </p>
 
 <h1 align="center">Navix Tools</h1>
