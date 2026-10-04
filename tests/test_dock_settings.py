@@ -68,8 +68,9 @@ def test_appearance_saves_edge_width_and_liquid(qtbot):
     page.edge.setCurrentIndex(page.edge.findData("top"))
     page.width.setValue(360)
     page.liquid.setChecked(False)
+    page.show_dock.setChecked(False)
     qtbot.mouseClick(page.save_button, Qt.MouseButton.LeftButton)
-    assert h.dock_saved[-1] == replace(DockConfig(), edge="top", width=360, liquid=False)
+    assert h.dock_saved[-1] == replace(DockConfig(), edge="top", width=360, liquid=False, show_dock=False)
 
 
 def test_ai_page_toggles_sources(qtbot):

@@ -138,3 +138,17 @@ def test_invalid_notification_settings(tmp_path, data, fragment):
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(DockConfigError, match=fragment):
         load_dock_config(path)
+
+
+def test_show_dock_defaults_on_and_roundtrips(tmp_path):
+    path = tmp_path / "dock.json"
+    assert DockConfig().show_dock is True
+    save_dock_config(path, DockConfig(show_dock=False))
+    assert load_dock_config(path).show_dock is False
+
+
+def test_invalid_show_dock(tmp_path):
+    path = tmp_path / "dock.json"
+    path.write_text('{"show_dock": "no"}', encoding="utf-8")
+    with pytest.raises(DockConfigError, match="show_dock"):
+        load_dock_config(path)

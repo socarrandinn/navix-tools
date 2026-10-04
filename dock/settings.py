@@ -621,9 +621,12 @@ class AppearancePage(_Page):
         self.width.setSuffix(" px")
         self.width.setValue(window.config.width)
         self.liquid = _switch(window.config.liquid, "Efecto líquido")
+        self.show_dock = _switch(window.config.show_dock, "Mostrar barra en el borde")
         _row(group, "palette", "Borde de la pantalla", "Dónde se pega la barra.", self.edge)
         _row(group, "palette", "Ancho de las apps", "", self.width)
         _row(group, "palette", "Efecto líquido", "Ondas al abrir y al pasar el mouse.", self.liquid)
+        _row(group, "palette", "Barra en el borde",
+             "Apagada, las apps se abren solo desde el ícono de la bandeja.", self.show_dock)
         self.page_layout.addWidget(frame)
         self.page_layout.addStretch(1)
         self.message = _message()
@@ -633,7 +636,7 @@ class AppearancePage(_Page):
 
     def save(self) -> None:
         self.window.save_dock(edge=self.edge.currentData(), width=self.width.value(),
-                              liquid=self.liquid.isChecked())
+                              liquid=self.liquid.isChecked(), show_dock=self.show_dock.isChecked())
         self.message.setText("Guardado.")
 
 

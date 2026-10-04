@@ -28,6 +28,7 @@ class DockConfig:
     liquid: bool = True
     notify: bool = True
     notify_threshold: int = 85
+    show_dock: bool = True  # barra en el borde; la bandeja del sistema está siempre
 
 
 def dock_dir() -> Path:
@@ -84,6 +85,9 @@ def load_dock_config(path: Path) -> DockConfig:
     threshold = raw.get("notify_threshold", default.notify_threshold)
     if isinstance(threshold, bool) or not isinstance(threshold, int) or not 50 <= threshold <= 100:
         raise DockConfigError(f"{path}: notify_threshold debe ser un entero entre 50 y 100")
+    show_dock = raw.get("show_dock", default.show_dock)
+    if not isinstance(show_dock, bool):
+        raise DockConfigError(f"{path}: show_dock debe ser true o false")
     return DockConfig(edge=edge, width=width, tools=tuple(tools), pinned=pinned,
                       position=float(position), ai_sources=tuple(ai_sources), liquid=liquid,
-                      notify=notify, notify_threshold=threshold)
+                      notify=notify, notify_threshold=threshold, show_dock=show_dock)

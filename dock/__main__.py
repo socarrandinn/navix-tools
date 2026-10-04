@@ -20,6 +20,7 @@ from .panel import Panel, primary_area
 from .registry import load_tools
 from .settings import SettingsWindow
 from .single import acquire_single_instance
+from .tray import TrayPanel
 from .tools.ai_usage import read_claude_default, read_codex_default
 from .worker import run_async
 
@@ -66,12 +67,17 @@ def main(argv: list[str] | None = None) -> int:
                       on_config_change=lambda changed: save_dock_config(config_path, changed),
                       on_settings=open_settings)
         QGuiApplication.primaryScreen().availableGeometryChanged.connect(panel.reposition)
-        panel.show()
+        panel.setVisible(dock_config.show_dock)
         return panel
 
     def save_and_apply(changed: DockConfig) -> None:
         save_dock_config(config_path, changed)
         old = current()
+        if changed.tools != old.config.tools or changed.width != old.config.width:
+            stale = state.pop("tray_panel", None)  # se rearma con las apps y el ancho nuevos
+            if stale is not None:
+                stale.close()
+                stale.deleteLater()
         if changed.tools != old.config.tools:
             # Cambiaron las apps de la barra: se arma una barra nueva con las elegidas.
             state["panel"] = build_panel(changed)
@@ -79,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
             old.deleteLater()
         else:
             old.apply_config(changed)
+            old.setVisible(changed.show_dock)
 
     tray = QSystemTrayIcon(QIcon(str(APP_ICON)))
     tray.setToolTip(APP_NAME)
@@ -118,6 +125,20 @@ def main(argv: list[str] | None = None) -> int:
     tray_menu.addSeparator()
     tray_menu.addAction("Salir").triggered.connect(app.quit)
     tray.setContextMenu(tray_menu)
+
+    def toggle_tray_panel() -> None:
+        panel = state.get("tray_panel")
+        if panel is None:
+            dock_config = current().config
+            panel = TrayPanel(load_tools(dock_config.tools), width=dock_config.width)
+            state["tray_panel"] = panel
+        panel.toggle(primary_area(), tray.geometry())
+
+    def on_tray_activated(reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            toggle_tray_panel()
+
+    tray.activated.connect(on_tray_activated)
     tray.show()
 
     def read_usage():
