@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -105,6 +106,10 @@ def main(argv: list[str] | None = None) -> int:
 
     def open_settings() -> None:
         window = state.get("settings")
+        if window is not None and not window.isVisible():
+            # Cerrada: se rearma para mostrar la config actual (p. ej. barra ocultada desde un menú).
+            window.deleteLater()
+            window = None
         if window is None:
             recorder = statusline.default_recorder_command()
             window = SettingsWindow(
@@ -129,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
 
     tray_menu = QMenu()
     tray_menu.addAction("Configuración").triggered.connect(open_settings)
+    dock_action = tray_menu.addAction("Barra en el borde")
+    dock_action.setCheckable(True)
+    dock_action.triggered.connect(lambda checked: save_and_apply(replace(current().config, show_dock=checked)))
+    tray_menu.aboutToShow.connect(lambda: dock_action.setChecked(current().config.show_dock))
     tray_menu.addSeparator()
     tray_menu.addAction("Salir").triggered.connect(app.quit)
     tray.setContextMenu(tray_menu)

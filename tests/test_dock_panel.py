@@ -218,7 +218,7 @@ def test_settings_icon_opens_a_menu_with_settings_pin_and_quit(qtbot):
     shown = []
     panel.exec_menu = lambda menu, pos: shown.append([a.text() for a in menu.actions() if a.text()])
     panel.settings_button.click()
-    assert shown == [["Configuración", "Fijar panel", "Salir"]]
+    assert shown == [["Configuración", "Fijar panel", "Ocultar barra", "Salir"]]
     assert not hasattr(panel, "quit_button")
 
 
@@ -726,3 +726,30 @@ def test_dragging_cancels_the_swell(qtbot):
     panel.drag_to(start + QPoint(0, 30))
     assert panel.swell == 0.0
     panel.end_drag(start + QPoint(0, 30))
+
+
+def test_no_swell_while_an_app_is_open(qtbot):
+    panel, _ = _svg_panel(qtbot)
+    button = panel.tool_buttons["red"]
+    panel.open_tool("red")
+    button.enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
+    assert panel.swell == 0.0
+
+
+def test_opening_an_app_drops_the_swell(qtbot):
+    panel, _ = _svg_panel(qtbot)
+    button = panel.tool_buttons["red"]
+    button.enterEvent(QEnterEvent(QPointF(), QPointF(), QPointF()))
+    assert panel.swell == 1.0
+    panel.open_tool("red")
+    assert panel.swell == 0.0
+    assert panel.revealed
+
+
+def test_hide_bar_menu_entry_hides_the_dock_and_saves_it(qtbot):
+    panel, state = make_panel(qtbot)
+    panel.show()
+    menu = panel.build_menu()
+    next(a for a in menu.actions() if a.text() == "Ocultar barra").trigger()
+    assert not panel.isVisible()
+    assert state["saved"][-1].show_dock is False

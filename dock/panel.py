@@ -452,6 +452,7 @@ class Panel(QWidget):
     def open_tool(self, name: str) -> None:
         self.hide_timer.stop()
         self._cancel_drag()
+        self._drop_swell()
         self.current = name
         self.stack.setCurrentWidget(self.cards[name])
         self.title.setText(self._titles[name])
@@ -820,9 +821,16 @@ class Panel(QWidget):
 
         add("Configuración", "settings", lambda: self.on_settings())
         add("Soltar panel" if self.config.pinned else "Fijar panel", "pin", self.toggle_pin)
+        add("Ocultar barra", "x", self.hide_dock)
         menu.addSeparator()
         add("Salir", "power", lambda: self.on_close())
         return menu
+
+    def hide_dock(self) -> None:
+        """Deja solo el ícono de la bandeja; la barra vuelve desde su menú o desde Configuración."""
+        self.conceal(force=True)
+        self._save(show_dock=False)
+        self.hide()
 
     def exec_menu(self, menu: QMenu, position: QPoint) -> None:
         menu.exec(position)
@@ -897,6 +905,8 @@ class Panel(QWidget):
         self._set_swell_target(None)
 
     def _set_swell_target(self, button: AppIconButton | None) -> None:
+        if not self.flyout.isHidden():
+            button = None  # con una app abierta (o brotando) el bulto chocaría con el cuello líquido
         if button is self._swell_target:
             return
         self._swell_target = button
